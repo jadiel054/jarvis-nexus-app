@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Cpu, Shield, Wifi, Zap, Database, Eye } from 'lucide-react';
+import { CornerBrackets, ScanLine, GridBackground } from '@/utils/hudElements';
 
 const QUICK_COMMANDS = [
   { icon: '🌤️', label: 'Clima', cmd: 'Como está o clima em São Paulo?' },
@@ -72,9 +73,7 @@ export default function SplashScreen({ onStart, onQuickCommand }) {
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-[#050a0f] overflow-hidden">
       {/* Animated background */}
       <div className="absolute inset-0 pointer-events-none">
-        {/* Grid */}
-        <div className="absolute inset-0 opacity-[0.03]"
-          style={{ backgroundImage: 'linear-gradient(#00ffff 1px, transparent 1px), linear-gradient(90deg, #00ffff 1px, transparent 1px)', backgroundSize: '50px 50px' }} />
+        <GridBackground color="#00ffff" opacity={0.03} size={50} />
 
         {/* Rotating rings */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
@@ -90,14 +89,9 @@ export default function SplashScreen({ onStart, onQuickCommand }) {
           ))}
         </div>
 
-        {/* Corner brackets */}
-        {['top-6 left-6 border-t-2 border-l-2', 'top-6 right-6 border-t-2 border-r-2',
-          'bottom-6 left-6 border-b-2 border-l-2', 'bottom-6 right-6 border-b-2 border-r-2'].map((cls, i) => (
-          <div key={i} className={`absolute w-14 h-14 border-cyan-500/25 ${cls}`} />
-        ))}
+        <CornerBrackets size={14} offset={6} color="cyan-500/25" borderWidth="border-2" />
 
-        {/* Scan line */}
-        <div className="absolute w-full h-px bg-gradient-to-r from-transparent via-cyan-400/15 to-transparent animate-scanline" />
+        <ScanLine />
       </div>
 
       <div className="relative z-10 w-full max-w-2xl mx-auto px-6 flex flex-col items-center gap-6">

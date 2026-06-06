@@ -1,16 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Monitor, Smartphone, Trash2, RefreshCw } from 'lucide-react';
 import { getSessions, revokeSession, getDeviceId } from './deviceGuard';
-
-function timeAgo(ts) {
-  const diff = Date.now() - ts;
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'agora mesmo';
-  if (m < 60) return `há ${m}min`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `há ${h}h`;
-  return `há ${Math.floor(h / 24)}d`;
-}
+import { timeAgo } from '@/utils/timeAgo';
 
 export default function SessionManager() {
   const [sessions, setSessions] = useState([]);

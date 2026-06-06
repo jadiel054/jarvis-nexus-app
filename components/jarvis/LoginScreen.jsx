@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
+import { GridBackground, ScanLine } from '@/utils/hudElements';
 
 export default function LoginScreen({ onLoggedIn }) {
   const [loading, setLoading] = useState(false);
@@ -11,10 +12,7 @@ export default function LoginScreen({ onLoggedIn }) {
 
   return (
     <div className="h-screen bg-[#050a0f] flex items-center justify-center relative overflow-hidden">
-      {/* Background grid */}
-      <div className="absolute inset-0 opacity-5"
-        style={{ backgroundImage: 'linear-gradient(#00ffff 1px, transparent 1px), linear-gradient(90deg, #00ffff 1px, transparent 1px)', backgroundSize: '40px 40px' }}
-      />
+      <GridBackground color="#00ffff" opacity={0.05} />
       
       {/* Animated rings */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] opacity-10">
@@ -23,10 +21,7 @@ export default function LoginScreen({ onLoggedIn }) {
         <div className="absolute inset-16 rounded-full border border-cyan-800/20 animate-hud-rotate" style={{ animationDuration: '15s' }} />
       </div>
 
-      {/* Scan line */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden">
-        <div className="w-full h-px bg-gradient-to-r from-transparent via-cyan-400/20 to-transparent animate-scanline" />
-      </div>
+      <ScanLine />
 
       <div className="relative z-10 w-full max-w-sm mx-auto px-6 animate-fade-in-up">
         {/* Logo */}

@@ -1,22 +1,6 @@
 import React, { useEffect } from 'react';
 import { Zap, Shield } from 'lucide-react';
-
-// Soft tech beep using Web Audio API
-function playBeep(freq = 880, type = 'square', duration = 0.12) {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = type;
-    osc.frequency.setValueAtTime(freq, ctx.currentTime);
-    gain.gain.setValueAtTime(0.08, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + duration);
-  } catch {}
-}
+import { playBeep } from '@/utils/audioFeedback';
 
 export function playCombatBeep() {
   playBeep(440, 'sawtooth', 0.08);

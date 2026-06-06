@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Shield, ShieldOff, Fingerprint, AlertTriangle, Lock } from 'lucide-react';
+import { CornerBrackets } from '@/utils/hudElements';
+import { attemptWebAuthn } from '@/utils/webauthn';
 
 const SARCASTIC_MESSAGES = [
   "Sinto muito, mas o senhor não é o Sr. Jadiel. Tente novamente em outra vida.",
@@ -34,35 +36,15 @@ export default function BiometricGuard({ onAuthenticated, onClose }) {
       });
     }, 150);
 
-    try {
-      // Try WebAuthn biometric
-      const supported = window.PublicKeyCredential &&
-        await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-
-      if (supported) {
-        // Use credential.get as a presence check (Touch ID / Face ID / Windows Hello)
-        const challenge = new Uint8Array(32);
-        window.crypto.getRandomValues(challenge);
-
-        await navigator.credentials.get({
-          publicKey: {
-            challenge,
-            timeout: 30000,
-            userVerification: 'required',
-            rpId: window.location.hostname || 'localhost',
-          }
-        });
-
-        clearInterval(interval);
-        setScanProgress(100);
-        setTimeout(() => {
-          onAuthenticated();
-          onClose();
-        }, 400);
-        return;
-      }
-    } catch (err) {
-      // Auth failed or no biometric credential registered
+    const result = await attemptWebAuthn();
+    if (result.success) {
+      clearInterval(interval);
+      setScanProgress(100);
+      setTimeout(() => {
+        onAuthenticated();
+        onClose();
+      }, 400);
+      return;
     }
 
     // Fallback: try navigator.credentials with simple platform authenticator check
@@ -103,11 +85,7 @@ export default function BiometricGuard({ onAuthenticated, onClose }) {
       <div className="absolute inset-0 bg-black/85 backdrop-blur-md" />
 
       <div className="relative w-full max-w-sm mx-4 animate-fade-in-up">
-        {/* Corner brackets */}
-        {['top-0 left-0 border-t-2 border-l-2', 'top-0 right-0 border-t-2 border-r-2',
-          'bottom-0 left-0 border-b-2 border-l-2', 'bottom-0 right-0 border-b-2 border-r-2'].map((cls, i) => (
-          <div key={i} className={`absolute w-5 h-5 border-cyan-400/40 ${cls}`} />
-        ))}
+        <CornerBrackets size={5} offset={0} color="cyan-400/40" borderWidth="border-2" />
 
         <div className="bg-[#080f1a] border border-cyan-800/30 rounded-2xl overflow-hidden p-6"
           style={{ boxShadow: phase === 'blocked' ? '0 0 40px rgba(255,60,0,0.15)' : '0 0 40px rgba(0,255,255,0.06)' }}>

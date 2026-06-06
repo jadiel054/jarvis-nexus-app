@@ -1,12 +1,8 @@
-import React, { useState, useRef } from 'react';
-import { Shield, Fingerprint, KeyRound, ShieldOff } from 'lucide-react';
-
-const EMERGENCY_PIN_KEY = 'jarvis_emergency_pin';
-const DEFAULT_PIN = '123456'; // PIN padrão de 6 dígitos
-
-function getStoredPin() {
-  return localStorage.getItem(EMERGENCY_PIN_KEY) || DEFAULT_PIN;
-}
+import React, { useState, useCallback } from 'react';
+import { Fingerprint, KeyRound, ShieldOff } from 'lucide-react';
+import { HudOverlay } from '@/utils/hudElements';
+import { usePinInput, PinInputGrid, getStoredPin } from '@/utils/pinInput';
+import { attemptWebAuthn } from '@/utils/webauthn';
 
 const SARCASTIC_DENIED = [
   "PIN incorreto. Isso é embaraçoso. Tente novamente.",
@@ -16,56 +12,17 @@ const SARCASTIC_DENIED = [
 ];
 
 export default function BiometricGate({ onSuccess, onCancel }) {
-  // Start directly on PIN screen — PIN is primary, biometric is optional
   const [mode, setMode] = useState('pin'); // pin | pin_error | biometric_pending | blocked
-  const [pin, setPin] = useState(['', '', '', '', '', '']);
   const [errorMsg, setErrorMsg] = useState('');
   const [failCount, setFailCount] = useState(0);
-  const pinRef0 = useRef(); const pinRef1 = useRef(); const pinRef2 = useRef();
-  const pinRef3 = useRef(); const pinRef4 = useRef(); const pinRef5 = useRef();
-  const pinRefs = [pinRef0, pinRef1, pinRef2, pinRef3, pinRef4, pinRef5];
 
-  // ── WebAuthn attempt ────────────────────────────────────────────
-  const attemptBiometric = async () => {
-    setMode('biometric_pending');
-    if (!window.PublicKeyCredential) { setMode('pin'); return; }
-    try {
-      const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-      if (!available) { setMode('pin'); return; }
-      const challenge = new Uint8Array(32);
-      crypto.getRandomValues(challenge);
-      await navigator.credentials.get({
-        publicKey: { challenge, timeout: 30000, userVerification: 'required',
-          rpId: window.location.hostname || 'localhost', allowCredentials: [] },
-      });
-      onSuccess();
-    } catch {
-      setMode('pin');
-    }
-  };
-
-  // ── PIN logic ───────────────────────────────────────────────────
-  const handlePinDigit = (idx, val) => {
-    if (!/^\d?$/.test(val)) return;
-    const next = [...pin];
-    next[idx] = val;
-    setPin(next);
-    if (val && idx < 5) pinRefs[idx + 1].current?.focus();
-    if (next.every(d => d !== '') && idx === 5) verifyPin(next.join(''));
-  };
-
-  const handlePinKeyDown = (idx, e) => {
-    if (e.key === 'Backspace' && !pin[idx] && idx > 0) pinRefs[idx - 1].current?.focus();
-  };
-
-  const verifyPin = (entered) => {
+  const verifyPin = useCallback((entered) => {
     if (entered === getStoredPin()) {
       onSuccess();
     } else {
       const newFail = failCount + 1;
       setFailCount(newFail);
-      setPin(['', '', '', '', '', '']);
-      pinRefs[0].current?.focus();
+      pinInput.reset();
       if (newFail >= 5) {
         setMode('blocked');
       } else {
@@ -74,12 +31,24 @@ export default function BiometricGate({ onSuccess, onCancel }) {
         setMode('pin_error');
       }
     }
+  }, [failCount, onSuccess]);
+
+  const pinInput = usePinInput({ length: 6, onComplete: verifyPin });
+
+  const handleBiometric = async () => {
+    setMode('biometric_pending');
+    const result = await attemptWebAuthn();
+    if (result.success) {
+      onSuccess();
+    } else {
+      setMode('pin');
+    }
   };
 
   // ── Blocked ──
   if (mode === 'blocked') {
     return (
-      <Overlay>
+      <HudOverlay>
         <div className="bg-[#0f0505] border border-red-800/50 rounded-2xl p-8 text-center"
           style={{ boxShadow: '0 0 60px rgba(255,0,0,0.08)' }}>
           <ShieldOff className="w-10 h-10 text-red-400 mx-auto mb-4" />
@@ -90,14 +59,14 @@ export default function BiometricGate({ onSuccess, onCancel }) {
             Sair
           </button>
         </div>
-      </Overlay>
+      </HudOverlay>
     );
   }
 
   // ── Biometric pending ──
   if (mode === 'biometric_pending') {
     return (
-      <Overlay>
+      <HudOverlay>
         <div className="bg-[#080f1a] border border-cyan-800/40 rounded-2xl p-8 text-center"
           style={{ boxShadow: '0 0 60px rgba(0,255,255,0.06)' }}>
           <div className="w-20 h-20 mx-auto mb-6 rounded-full border-2 border-cyan-400 flex items-center justify-center animate-pulse"
@@ -111,13 +80,13 @@ export default function BiometricGate({ onSuccess, onCancel }) {
             🔑 Usar PIN de 6 Dígitos
           </button>
         </div>
-      </Overlay>
+      </HudOverlay>
     );
   }
 
   // ── PIN screen (primary) ──
   return (
-    <Overlay>
+    <HudOverlay>
       <div className="bg-[#080f1a] border border-cyan-800/40 rounded-2xl p-8 text-center"
         style={{ boxShadow: '0 0 60px rgba(0,255,255,0.06)' }}>
 
@@ -134,36 +103,20 @@ export default function BiometricGate({ onSuccess, onCancel }) {
           PIN padrão: <span className="text-cyan-700/60">123456</span> — altere nas Configurações de Segurança
         </p>
 
-        {/* PIN inputs */}
-        <div className="flex justify-center gap-2 mb-4">
-          {pin.map((digit, i) => (
-            <input
-              key={i}
-              ref={pinRefs[i]}
-              type="password"
-              inputMode="numeric"
-              maxLength={1}
-              value={digit}
-              onChange={e => handlePinDigit(i, e.target.value)}
-              onKeyDown={e => handlePinKeyDown(i, e)}
-              className="w-10 h-12 text-center text-xl font-mono font-bold rounded-xl border transition-all outline-none"
-              style={{
-                background: '#050a0f',
-                borderColor: digit ? 'rgba(0,255,255,0.5)' : 'rgba(0,255,255,0.15)',
-                color: '#67e8f9',
-                boxShadow: digit ? '0 0 10px rgba(0,255,255,0.1)' : 'none',
-              }}
-              autoFocus={i === 0}
-            />
-          ))}
+        <div className="mb-4">
+          <PinInputGrid
+            pin={pinInput.pin}
+            setRef={pinInput.setRef}
+            onDigit={pinInput.handleDigit}
+            onKeyDown={pinInput.handleKeyDown}
+          />
         </div>
 
         {mode === 'pin_error' && (
           <p className="text-[10px] font-mono text-red-400/80 mb-3 italic">"{errorMsg}"</p>
         )}
 
-        {/* Biometric as secondary option */}
-        <button onClick={attemptBiometric}
+        <button onClick={handleBiometric}
           className="w-full py-2.5 rounded-xl font-mono text-xs border border-cyan-800/30 text-cyan-600/60 hover:text-cyan-400 hover:border-cyan-600/40 transition-all mb-2 flex items-center justify-center gap-2">
           <Fingerprint className="w-3.5 h-3.5" />
           Entrar com Biometria (Face ID / Touch ID)
@@ -174,17 +127,6 @@ export default function BiometricGate({ onSuccess, onCancel }) {
           Cancelar
         </button>
       </div>
-    </Overlay>
-  );
-}
-
-function Overlay({ children }) {
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/85 backdrop-blur-md" />
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
-        style={{ backgroundImage: 'linear-gradient(#00ffff 1px, transparent 1px), linear-gradient(90deg, #00ffff 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-      <div className="relative z-10 w-full max-w-sm animate-fade-in-up">{children}</div>
-    </div>
+    </HudOverlay>
   );
 }

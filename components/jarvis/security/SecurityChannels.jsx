@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Phone, Mail, CheckCircle, Loader2, Fingerprint, ScanFace } from 'lucide-react';
 import { base44 } from '@/api/base44Client';
+import { attemptWebAuthn } from '@/utils/webauthn';
 
 const STORAGE_KEY = 'jarvis_security_channels';
 
@@ -21,24 +22,20 @@ function BiometricRegistration() {
   const [faceStatus, setFaceStatus] = useState('idle');
   const stored = getChannels();
 
-  const attemptBiometric = async (type) => {
+  const handleBiometric = async (type) => {
     const setter = type === 'touch' ? setTouchStatus : setFaceStatus;
     setter('pending');
-    if (!window.PublicKeyCredential) { setter('unsupported'); return; }
-    try {
-      const avail = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-      if (!avail) { setter('unsupported'); return; }
-      const challenge = new Uint8Array(32);
-      crypto.getRandomValues(challenge);
-      await navigator.credentials.get({
-        publicKey: { challenge, timeout: 30000, userVerification: 'required',
-          rpId: window.location.hostname || 'localhost', allowCredentials: [] }
-      });
+    const result = await attemptWebAuthn();
+    if (result.reason === 'unsupported' || result.reason === 'unavailable') {
+      setter('unsupported');
+      return;
+    }
+    if (result.success) {
       const channels = getChannels();
       channels[type === 'touch' ? 'touch_id' : 'face_id'] = true;
       saveChannels(channels);
       setter('success');
-    } catch {
+    } else {
       setter('fail');
       setTimeout(() => setter('idle'), 2500);
     }
@@ -65,7 +62,7 @@ function BiometricRegistration() {
           </div>
         ) : (
           <button
-            onClick={() => attemptBiometric(type)}
+            onClick={() => handleBiometric(type)}
             disabled={status === 'pending'}
             className="px-3 py-1.5 rounded-lg border border-cyan-700/30 text-[10px] font-mono text-cyan-400/70 hover:border-cyan-500/50 hover:text-cyan-300 transition-all disabled:opacity-40"
           >

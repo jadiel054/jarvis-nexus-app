@@ -1,73 +1,47 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Shield, ShieldOff, KeyRound, AlertTriangle } from 'lucide-react';
 import { trustDevice } from './deviceGuard';
-
-const EMERGENCY_PIN_KEY = 'jarvis_emergency_pin';
-const DEFAULT_PIN = '123456'; // PIN padrão de 6 dígitos
-
-function getStoredPin() {
-  return localStorage.getItem(EMERGENCY_PIN_KEY) || DEFAULT_PIN;
-}
+import { HudOverlay } from '@/utils/hudElements';
+import { usePinInput, PinInputGrid, getStoredPin } from '@/utils/pinInput';
+import { playToneSequence } from '@/utils/audioFeedback';
 
 function playAlertTone(confirmed = false) {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    if (confirmed) {
-      [440, 550, 660].forEach((freq, i) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.value = freq; osc.type = 'sine';
-        gain.gain.setValueAtTime(0.18, ctx.currentTime + i * 0.12);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.12 + 0.3);
-        osc.start(ctx.currentTime + i * 0.12);
-        osc.stop(ctx.currentTime + i * 0.12 + 0.3);
-      });
-    } else {
-      [220, 180, 220].forEach((freq, i) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain); gain.connect(ctx.destination);
-        osc.frequency.value = freq; osc.type = 'square';
-        gain.gain.setValueAtTime(0.08, ctx.currentTime + i * 0.18);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.18 + 0.15);
-        osc.start(ctx.currentTime + i * 0.18);
-        osc.stop(ctx.currentTime + i * 0.18 + 0.15);
-      });
-    }
-  } catch {}
+  if (confirmed) {
+    playToneSequence([
+      { freq: 440, type: 'sine', delay: 0, duration: 0.3, volume: 0.18 },
+      { freq: 550, type: 'sine', delay: 0.12, duration: 0.3, volume: 0.18 },
+      { freq: 660, type: 'sine', delay: 0.24, duration: 0.3, volume: 0.18 },
+    ]);
+  } else {
+    playToneSequence([
+      { freq: 220, type: 'square', delay: 0, duration: 0.15, volume: 0.08 },
+      { freq: 180, type: 'square', delay: 0.18, duration: 0.15, volume: 0.08 },
+      { freq: 220, type: 'square', delay: 0.36, duration: 0.15, volume: 0.08 },
+    ]);
+  }
 }
 
 export default function NewDeviceChallenge({ deviceId, deviceLabel, ipInfo, onSuccess, onBlock }) {
   const [phase, setPhase] = useState('alert'); // alert | pin | confirmed | blocked
-  const [pin, setPin] = useState(['', '', '', '', '', '']);
   const [pinError, setPinError] = useState('');
   const [failCount, setFailCount] = useState(0);
-  const pinRef0 = useRef(); const pinRef1 = useRef(); const pinRef2 = useRef();
-  const pinRef3 = useRef(); const pinRef4 = useRef(); const pinRef5 = useRef();
-  const pinRefs = [pinRef0, pinRef1, pinRef2, pinRef3, pinRef4, pinRef5];
 
   useEffect(() => { playAlertTone(false); }, []);
 
-  const handlePinDigit = (i, val) => {
-    if (!/^\d?$/.test(val)) return;
-    const next = [...pin]; next[i] = val; setPin(next);
-    if (val && i < 5) pinRefs[i + 1].current?.focus();
-    if (next.every(d => d !== '') && i === 5) verifyPin(next.join(''));
-  };
+  const confirmSuccess = useCallback(() => {
+    trustDevice(deviceId);
+    playAlertTone(true);
+    setPhase('confirmed');
+    setTimeout(() => onSuccess(), 1800);
+  }, [deviceId, onSuccess]);
 
-  const handlePinKey = (i, e) => {
-    if (e.key === 'Backspace' && !pin[i] && i > 0) pinRefs[i - 1].current?.focus();
-  };
-
-  const verifyPin = (entered) => {
+  const verifyPin = useCallback((entered) => {
     if (entered === getStoredPin()) {
       confirmSuccess();
     } else {
       const nf = failCount + 1;
       setFailCount(nf);
-      setPin(['', '', '', '', '', '']);
-      pinRefs[0].current?.focus();
+      pinInput.reset();
       if (nf >= 4) {
         playAlertTone(false);
         setPhase('blocked');
@@ -77,19 +51,14 @@ export default function NewDeviceChallenge({ deviceId, deviceLabel, ipInfo, onSu
         playAlertTone(false);
       }
     }
-  };
+  }, [failCount, confirmSuccess, onBlock]);
 
-  const confirmSuccess = () => {
-    trustDevice(deviceId);
-    playAlertTone(true);
-    setPhase('confirmed');
-    setTimeout(() => onSuccess(), 1800);
-  };
+  const pinInput = usePinInput({ length: 6, onComplete: verifyPin });
 
   // ── Alert phase ──
   if (phase === 'alert') {
     return (
-      <Overlay orange>
+      <HudOverlay orange zIndex={70}>
         <div className="bg-[#0f0800] border-2 border-orange-500/60 rounded-2xl p-7 text-center"
           style={{ boxShadow: '0 0 60px rgba(251,146,60,0.2)' }}>
           <style>{`@keyframes pulse-orange { 0%,100%{box-shadow:0 0 30px rgba(251,146,60,0.15)} 50%{box-shadow:0 0 60px rgba(251,146,60,0.4)} }`}</style>
@@ -117,14 +86,14 @@ export default function NewDeviceChallenge({ deviceId, deviceLabel, ipInfo, onSu
             Não sou eu — Bloquear acesso
           </button>
         </div>
-      </Overlay>
+      </HudOverlay>
     );
   }
 
   // ── PIN phase ──
   if (phase === 'pin') {
     return (
-      <Overlay orange>
+      <HudOverlay orange zIndex={70}>
         <div className="bg-[#0f0800] border-2 border-orange-500/50 rounded-2xl p-8 text-center"
           style={{ boxShadow: '0 0 60px rgba(251,146,60,0.15)' }}>
           <div className="w-16 h-16 mx-auto mb-5 rounded-full border border-orange-600/40 flex items-center justify-center"
@@ -134,7 +103,6 @@ export default function NewDeviceChallenge({ deviceId, deviceLabel, ipInfo, onSu
           <h2 className="text-sm font-bold font-mono text-orange-300 tracking-widest mb-1">VERIFICAÇÃO DE IDENTIDADE</h2>
           <p className="text-[10px] font-mono text-orange-700/50 mb-1">Código PIN de 6 dígitos</p>
 
-          {/* Show default PIN hint for first access */}
           <div className="mb-5 p-2.5 rounded-lg border border-orange-700/30 bg-orange-950/30">
             <p className="text-[10px] font-mono text-orange-400/80">
               🔑 PIN temporário de primeiro acesso:
@@ -143,17 +111,14 @@ export default function NewDeviceChallenge({ deviceId, deviceLabel, ipInfo, onSu
             <p className="text-[9px] font-mono text-orange-700/40 mt-1">Redefina após o login nas Configurações de Segurança</p>
           </div>
 
-          <div className="flex justify-center gap-2 mb-4">
-            {pin.map((d, i) => (
-              <input key={i} ref={pinRefs[i]} type="password" inputMode="numeric" maxLength={1}
-                value={d}
-                onChange={e => handlePinDigit(i, e.target.value)}
-                onKeyDown={e => handlePinKey(i, e)}
-                className="w-10 h-12 text-center text-lg font-mono font-bold rounded-lg border outline-none transition-all"
-                style={{ background: '#050a0f', borderColor: d ? 'rgba(251,146,60,0.6)' : 'rgba(251,146,60,0.2)', color: '#fdba74', boxShadow: d ? '0 0 8px rgba(251,146,60,0.15)' : 'none' }}
-                autoFocus={i === 0}
-              />
-            ))}
+          <div className="mb-4">
+            <PinInputGrid
+              pin={pinInput.pin}
+              setRef={pinInput.setRef}
+              onDigit={pinInput.handleDigit}
+              onKeyDown={pinInput.handleKeyDown}
+              accentColor="orange"
+            />
           </div>
           {pinError && <p className="text-[10px] font-mono text-red-400/80 mb-3">{pinError}</p>}
           <button onClick={() => setPhase('alert')}
@@ -161,14 +126,14 @@ export default function NewDeviceChallenge({ deviceId, deviceLabel, ipInfo, onSu
             Voltar
           </button>
         </div>
-      </Overlay>
+      </HudOverlay>
     );
   }
 
   // ── Confirmed ──
   if (phase === 'confirmed') {
     return (
-      <Overlay>
+      <HudOverlay zIndex={70}>
         <div className="bg-[#050a0f] border-2 border-cyan-400/60 rounded-2xl p-8 text-center"
           style={{ boxShadow: '0 0 60px rgba(0,255,255,0.2)' }}>
           <div className="w-16 h-16 mx-auto mb-5 rounded-full border-2 border-cyan-400 flex items-center justify-center animate-pulse-glow"
@@ -180,14 +145,14 @@ export default function NewDeviceChallenge({ deviceId, deviceLabel, ipInfo, onSu
           <p className="text-[10px] font-mono text-cyan-700/60">Dispositivo registrado como confiável.</p>
           <p className="text-[9px] font-mono text-cyan-800/40 mt-1">Todos os protocolos de segurança satisfeitos.</p>
         </div>
-      </Overlay>
+      </HudOverlay>
     );
   }
 
   // ── Blocked ──
   if (phase === 'blocked') {
     return (
-      <Overlay orange>
+      <HudOverlay orange zIndex={70}>
         <div className="bg-[#0f0505] border-2 border-red-700/60 rounded-2xl p-8 text-center"
           style={{ boxShadow: '0 0 60px rgba(239,68,68,0.2)' }}>
           <ShieldOff className="w-10 h-10 text-red-400 mx-auto mb-4" />
@@ -195,20 +160,9 @@ export default function NewDeviceChallenge({ deviceId, deviceLabel, ipInfo, onSu
           <p className="text-[10px] font-mono text-red-700/60">Número máximo de tentativas atingido.</p>
           <p className="text-[10px] font-mono text-red-800/40 mt-1">Incidente registrado em log de segurança.</p>
         </div>
-      </Overlay>
+      </HudOverlay>
     );
   }
 
   return null;
-}
-
-function Overlay({ children, orange = false }) {
-  return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-      <div className={`absolute inset-0 backdrop-blur-md ${orange ? 'bg-black/90' : 'bg-black/85'}`} />
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none"
-        style={{ backgroundImage: `linear-gradient(${orange ? '#f97316' : '#00ffff'} 1px, transparent 1px), linear-gradient(90deg, ${orange ? '#f97316' : '#00ffff'} 1px, transparent 1px)`, backgroundSize: '40px 40px' }} />
-      <div className="relative z-10 w-full max-w-sm animate-fade-in-up">{children}</div>
-    </div>
-  );
 }

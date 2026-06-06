@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { base44 } from '@/api/base44Client';
+import { CornerBrackets } from '@/utils/hudElements';
 
 export default function LoginGate({ children }) {
   const [user, setUser] = useState(undefined); // undefined = loading
@@ -25,11 +26,7 @@ export default function LoginGate({ children }) {
   if (!user) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-[#050a0f] p-6 relative overflow-hidden">
-        {/* Corner brackets */}
-        <div className="absolute top-4 left-4 w-8 h-8 border-t border-l border-cyan-500/20" />
-        <div className="absolute top-4 right-4 w-8 h-8 border-t border-r border-cyan-500/20" />
-        <div className="absolute bottom-4 left-4 w-8 h-8 border-b border-l border-cyan-500/20" />
-        <div className="absolute bottom-4 right-4 w-8 h-8 border-b border-r border-cyan-500/20" />
+        <CornerBrackets size={8} offset={4} color="cyan-500/20" />
 
         <div className="w-full max-w-sm text-center space-y-8">
           {/* Logo */}

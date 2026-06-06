@@ -5,6 +5,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Zap, RefreshCw, AlertTriangle, CheckCircle2, Clock, Loader2, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { getLatestDeploys, diagnoseFailedDeploy } from './integrations/useVercel';
+import { timeAgo } from '@/utils/timeAgo';
 
 const STATE_CONFIG = {
   READY:    { color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/30', icon: CheckCircle2, label: 'Sucesso' },
@@ -12,15 +13,6 @@ const STATE_CONFIG = {
   BUILDING: { color: 'text-yellow-400', bg: 'bg-yellow-500/10 border-yellow-500/30', icon: Loader2, label: 'Building' },
   CANCELED: { color: 'text-gray-400',  bg: 'bg-gray-500/10 border-gray-500/30',   icon: X, label: 'Cancelado' },
 };
-
-function timeAgo(ts) {
-  if (!ts) return '';
-  const diff = Math.floor((Date.now() - ts) / 1000);
-  if (diff < 60) return `${diff}s atrás`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}min atrás`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h atrás`;
-  return `${Math.floor(diff / 86400)}d atrás`;
-}
 
 export default function DeployMonitor({ onDiagnosis }) {
   const [deploys, setDeploys] = useState([]);
