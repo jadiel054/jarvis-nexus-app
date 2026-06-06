@@ -1,9 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
+import { loadSettings, loadIntegrations, redact } from '@/utils/secureStorage';
 
 let _supabase = null;
 function getSupabase() {
   if (_supabase) return _supabase;
-  const i = JSON.parse(localStorage.getItem('jarvis_integrations') || '{}');
+  const i = loadIntegrations();
   if (i.supabase?.url && i.supabase?.anon_key)
     _supabase = createClient(i.supabase.url, i.supabase.anon_key);
   return _supabase;
@@ -14,7 +15,7 @@ const auth = {
   async me() {
     const stored = localStorage.getItem('jarvis_user');
     if (stored) return JSON.parse(stored);
-    const s = JSON.parse(localStorage.getItem('jarvis_settings') || '{}');
+    const s = loadSettings();
     const user = { id: 'local-user', email: s.user_email || 'user@jarvis.local', name: s.user_name || 'Usuário' };
     localStorage.setItem('jarvis_user', JSON.stringify(user));
     return user;
@@ -47,7 +48,7 @@ function makeEntity(tableName) {
 }
 
 async function callModel(model, messages) {
-  const s = JSON.parse(localStorage.getItem('jarvis_settings') || '{}');
+  const s = loadSettings();
   switch(model) {
     case 'claude': {
       if (!s.claude_api_key) throw new Error('no key');
@@ -72,8 +73,8 @@ async function callModel(model, messages) {
     case 'gemini_flash': case 'gemini_pro': {
       if (!s.gemini_api_key) throw new Error('no key');
       const m = model === 'gemini_flash' ? 'gemini-1.5-flash' : 'gemini-1.5-pro';
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${s.gemini_api_key}`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.gemini_api_key },
         body: JSON.stringify({ contents: messages.map(msg => ({ role: msg.role === 'assistant' ? 'model' : 'user', parts: [{ text: msg.content }] })) }),
       });
       if (!r.ok) throw new Error(`Gemini ${r.status}`);
@@ -123,7 +124,7 @@ async function callModel(model, messages) {
 }
 
 async function InvokeLLM({ prompt, file_urls }) {
-  const s = JSON.parse(localStorage.getItem('jarvis_settings') || '{}');
+  const s = loadSettings();
   const model = s.ai_model || 'auto';
   const messages = [{ role: 'user', content: prompt + (file_urls?.length ? `\nArquivos: ${file_urls.join(', ')}` : '') }];
   const priority = model === 'auto'
@@ -145,7 +146,8 @@ async function UploadFile({ file }) {
 }
 
 async function SendEmail({ to, subject, body }) {
-  console.log('[JARVIS] Email:', { to, subject }); return { success: true };
+  // Avoid logging recipient details to console in production
+  return { success: true };
 }
 
 export const base44 = {

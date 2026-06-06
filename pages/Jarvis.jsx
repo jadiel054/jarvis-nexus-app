@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { base44 } from '@/api/base44Client';
+import { loadSettings, saveSettings, migrateToSecureStorage } from '@/utils/secureStorage';
 import LoginScreen from '../components/jarvis/LoginScreen';
 import HudOverlay from '../components/jarvis/HudOverlay';
 import ProtocolHeader from '../components/jarvis/ProtocolHeader';
@@ -93,7 +94,8 @@ export default function Jarvis() {
   const recognitionRef = useRef(null);
 
   const [settings, setSettings] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('jarvis_settings') || '{}'); } catch { return {}; }
+    migrateToSecureStorage();
+    return loadSettings();
   });
 
   // ── Multi-tab state ───────────────────────────────────────────────
@@ -235,9 +237,9 @@ export default function Jarvis() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  const saveSettings = (s) => {
+  const handleSaveSettings = (s) => {
     setSettings(s);
-    localStorage.setItem('jarvis_settings', JSON.stringify(s));
+    saveSettings(s);
   };
 
   // ── Session memory summary ────────────────────────────────────────
@@ -346,9 +348,9 @@ export default function Jarvis() {
     // 💎 Gemini
     if ((model === 'gemini_pro' || model === 'gemini_flash') && s.gemini_api_key) {
       const geminiModel = model === 'gemini_flash' ? 'gemini-1.5-flash' : 'gemini-1.5-pro';
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${s.gemini_api_key}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': s.gemini_api_key },
         body: JSON.stringify({
           system_instruction: { parts: [{ text: systemPrompt }] },
           contents: [{ role: 'user', parts: [{ text: userText || '(analyze files)' }] }],
@@ -392,7 +394,9 @@ export default function Jarvis() {
   const handleWeather = async (city) => {
     const c = city === '__default__' ? (settings.preferred_city || 'São Paulo') : city;
     if (settings.openweather_api_key) {
-      const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(c)}&appid=${settings.openweather_api_key}&units=metric&lang=pt_br`);
+      const res = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(c)}&units=metric&lang=pt_br`, {
+        headers: { 'x-api-key': settings.openweather_api_key },
+      });
       if (res.ok) {
         const d = await res.json();
         return `🌤️ **${d.name}, ${d.sys.country}** — ${d.weather[0].description}\n🌡️ **${Math.round(d.main.temp)}°C** (sensação ${Math.round(d.main.feels_like)}°C) | 💧 ${d.main.humidity}% | 💨 ${Math.round(d.wind.speed * 3.6)} km/h`;
@@ -406,7 +410,9 @@ export default function Jarvis() {
     if (settings.openrouteservice_api_key) {
       const key = settings.openrouteservice_api_key;
       const geo = async (p) => {
-        const r = await fetch(`https://api.openrouteservice.org/geocode/search?api_key=${key}&text=${encodeURIComponent(p)}&size=1`);
+        const r = await fetch(`https://api.openrouteservice.org/geocode/search?text=${encodeURIComponent(p)}&size=1`, {
+          headers: { 'Authorization': key },
+        });
         if (!r.ok) return null;
         const d = await r.json();
         const c = d.features?.[0]?.geometry?.coordinates;
@@ -1124,7 +1130,7 @@ ${!isVoiceMode ? styleLayer + personalityLayer : ''}`;
         />
       )}
 
-      {showSettings && <SettingsPanel settings={settings} onSave={saveSettings} onClose={() => setShowSettings(false)} />}
+      {showSettings && <SettingsPanel settings={settings} onSave={handleSaveSettings} onClose={() => setShowSettings(false)} />}
       {showHistory && (
         <ConversationHistory
           currentMessages={messages}

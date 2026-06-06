@@ -3,18 +3,17 @@
  * Suporta: status do último deploy, leitura de logs e diagnóstico de falhas.
  */
 import { base44 } from '@/api/base44Client';
+import { loadIntegrations } from '@/utils/secureStorage';
 
 function getVercelToken() {
   try {
-    const stored = JSON.parse(localStorage.getItem('jarvis_integrations') || '{}');
-    return stored.vercel?.api_key || null;
+    return loadIntegrations().vercel?.api_key || null;
   } catch { return null; }
 }
 
 function getVercelProjectIds() {
   try {
-    const stored = JSON.parse(localStorage.getItem('jarvis_integrations') || '{}');
-    const raw = stored.vercel?.project_ids || '';
+    const raw = loadIntegrations().vercel?.project_ids || '';
     return raw.split(',').map(r => r.trim()).filter(Boolean);
   } catch { return []; }
 }

@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Send, Mic, Paperclip, X, MicOff, Link, Radio } from 'lucide-react';
 
 const ACCEPTED = 'image/jpeg,image/png,image/gif,image/webp,.pdf,.html,.htm,.txt,.json,.docx,.doc,.csv,.md';
+const MAX_MESSAGE_LENGTH = 10000;
 
 function detectUrl(text) {
   return /https?:\/\/[^\s]+/.test(text);
@@ -16,7 +17,7 @@ export default function ChatInput({ onSend, isLoading, isListening, onToggleMic,
 
   const handleSend = () => {
     if ((!text.trim() && files.length === 0) || isLoading) return;
-    onSend(text.trim(), files);
+    onSend(text.trim().slice(0, MAX_MESSAGE_LENGTH), files);
     setText('');
     setFiles([]);
   };
@@ -135,9 +136,10 @@ export default function ChatInput({ onSend, isLoading, isListening, onToggleMic,
         <div className="flex-1 relative">
           <textarea
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => setText(e.target.value.slice(0, MAX_MESSAGE_LENGTH))}
             onKeyDown={handleKeyDown}
             placeholder="Awaiting command override..."
+            maxLength={MAX_MESSAGE_LENGTH}
             rows={1}
             className="w-full bg-[#0a1520] border border-cyan-800/30 rounded-xl px-4 py-2.5 text-sm text-cyan-50
               placeholder:text-cyan-700/40 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20

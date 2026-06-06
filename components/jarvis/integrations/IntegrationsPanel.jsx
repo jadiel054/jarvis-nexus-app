@@ -9,16 +9,7 @@ import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, RefreshCw, CheckCircle2, XCircle, Loader2, GitBranch, Zap, Database } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-
-const STORAGE_KEY = 'jarvis_integrations';
-
-function loadIntegrations() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
-}
-
-function saveIntegrations(data) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
+import { loadIntegrations, saveIntegrations } from '@/utils/secureStorage';
 
 // ── Shared sub-components ─────────────────────────────────────────────────────
 function SectionHeader({ icon: Icon, color, title, subtitle }) {

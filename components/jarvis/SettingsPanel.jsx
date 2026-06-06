@@ -234,8 +234,9 @@ function TabSecurity({ form, set }) {
   const [pinChange, setPinChange] = useState({ show: false, current: '', next: '', confirm: '', error: '' });
 
   const savePin = () => {
-    const stored = localStorage.getItem('jarvis_emergency_pin') || '123456';
-    if (pinChange.current !== stored) {
+    const stored = localStorage.getItem('jarvis_emergency_pin');
+    // First-time setup: no existing PIN, so skip current-PIN check
+    if (stored && pinChange.current !== stored) {
       setPinChange(p => ({ ...p, error: 'PIN atual incorreto.' })); return;
     }
     if (pinChange.next.length < 6) {
@@ -259,7 +260,7 @@ function TabSecurity({ form, set }) {
           <KeyRound className="w-5 h-5 text-cyan-400/60" />
           <div className="flex-1">
             <p className="text-xs font-mono text-cyan-300/80">Senha Principal de Acesso</p>
-            <p className="text-[9px] font-mono text-cyan-700/50">PIN padrão: 123456 — redefina agora</p>
+            <p className="text-[9px] font-mono text-cyan-700/50">{localStorage.getItem('jarvis_emergency_pin') ? 'PIN configurado — altere se necessário' : 'Nenhum PIN definido — configure agora para proteger novos dispositivos'}</p>
           </div>
         </div>
         {!pinChange.show ? (

@@ -5,6 +5,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Zap, RefreshCw, AlertTriangle, CheckCircle2, Clock, Loader2, ChevronDown, ChevronUp, X } from 'lucide-react';
 import { getLatestDeploys, diagnoseFailedDeploy } from './integrations/useVercel';
+import { loadIntegrations } from '@/utils/secureStorage';
 
 const STATE_CONFIG = {
   READY:    { color: 'text-green-400', bg: 'bg-green-500/10 border-green-500/30', icon: CheckCircle2, label: 'Sucesso' },
@@ -63,7 +64,8 @@ export default function DeployMonitor({ onDiagnosis }) {
   const latest = deploys[0];
   const hasError = deploys.some(d => d.state === 'ERROR');
 
-  if (!localStorage.getItem('jarvis_integrations')?.includes('"api_key"')) return null;
+  const integrations = loadIntegrations();
+  if (!integrations.vercel?.api_key) return null;
 
   return (
     <div className={`mx-4 mb-2 rounded-xl border overflow-hidden transition-all ${hasError ? 'border-red-500/30' : 'border-cyan-900/25'}`}

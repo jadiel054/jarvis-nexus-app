@@ -6,6 +6,7 @@ import { gitPushHandler, readRepoFile, listRepoContents, commitFile, commitFile 
 import { runSandboxTest } from '../integrations/sandboxRunner';
 import { supabase } from '@/lib/supabaseClient';
 import { logAgentSession } from './databaseOracle';
+import { loadIntegrations } from '@/utils/secureStorage';
 
 const DEFAULT_REPO = 'jarvis-nexus-core';
 
@@ -31,7 +32,7 @@ export function invalidateRepoCache() { _repoCache = null; }
 
 async function resolveRepo(repo) {
   if (!repo) {
-    const stored = JSON.parse(localStorage.getItem('jarvis_integrations') || '{}');
+    const stored = loadIntegrations();
     const manualFirst = (stored.github?.repos || '').split(',').map(r => r.trim()).filter(Boolean)[0];
     if (manualFirst) return manualFirst;
     const cache = await getRepoCache();

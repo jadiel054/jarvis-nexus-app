@@ -2,18 +2,17 @@
  * useGitHub — Hook para acesso COMPLETO à API do GitHub via token salvo.
  * Suporta: leitura, criação de branches, edição de arquivos, commits e PRs.
  */
+import { loadIntegrations } from '@/utils/secureStorage';
 
 export function getGitHubToken() {
   try {
-    const stored = JSON.parse(localStorage.getItem('jarvis_integrations') || '{}');
-    return stored.github?.token || null;
+    return loadIntegrations().github?.token || null;
   } catch { return null; }
 }
 
 export function getConfiguredRepos() {
   try {
-    const stored = JSON.parse(localStorage.getItem('jarvis_integrations') || '{}');
-    const raw = stored.github?.repos || '';
+    const raw = loadIntegrations().github?.repos || '';
     return raw.split(',').map(r => r.trim()).filter(Boolean);
   } catch { return []; }
 }

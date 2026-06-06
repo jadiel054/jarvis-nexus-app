@@ -3,10 +3,26 @@ import { Shield, ShieldOff, KeyRound, AlertTriangle } from 'lucide-react';
 import { trustDevice } from './deviceGuard';
 
 const EMERGENCY_PIN_KEY = 'jarvis_emergency_pin';
-const DEFAULT_PIN = '123456'; // PIN padrão de 6 dígitos
+const LOCKOUT_KEY = 'jarvis_pin_lockout';
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const MAX_ATTEMPTS = 4;
 
 function getStoredPin() {
-  return localStorage.getItem(EMERGENCY_PIN_KEY) || DEFAULT_PIN;
+  return localStorage.getItem(EMERGENCY_PIN_KEY) || null;
+}
+
+function isLockedOut() {
+  try {
+    const lockout = JSON.parse(localStorage.getItem(LOCKOUT_KEY) || 'null');
+    if (!lockout) return false;
+    if (Date.now() - lockout.timestamp < LOCKOUT_DURATION_MS) return true;
+    localStorage.removeItem(LOCKOUT_KEY);
+    return false;
+  } catch { return false; }
+}
+
+function setLockout() {
+  localStorage.setItem(LOCKOUT_KEY, JSON.stringify({ timestamp: Date.now() }));
 }
 
 function playAlertTone(confirmed = false) {
@@ -61,19 +77,30 @@ export default function NewDeviceChallenge({ deviceId, deviceLabel, ipInfo, onSu
   };
 
   const verifyPin = (entered) => {
-    if (entered === getStoredPin()) {
+    const storedPin = getStoredPin();
+    if (!storedPin) {
+      setPinError('Nenhum PIN configurado. Configure um PIN nas Configurações → Segurança.');
+      return;
+    }
+    if (isLockedOut()) {
+      setPhase('blocked');
+      onBlock?.();
+      return;
+    }
+    if (entered === storedPin) {
       confirmSuccess();
     } else {
       const nf = failCount + 1;
       setFailCount(nf);
       setPin(['', '', '', '', '', '']);
       pinRefs[0].current?.focus();
-      if (nf >= 4) {
+      if (nf >= MAX_ATTEMPTS) {
         playAlertTone(false);
+        setLockout();
         setPhase('blocked');
         onBlock?.();
       } else {
-        setPinError(`PIN inválido. ${4 - nf} tentativa(s) restante(s).`);
+        setPinError(`PIN inválido. ${MAX_ATTEMPTS - nf} tentativa(s) restante(s).`);
         playAlertTone(false);
       }
     }
