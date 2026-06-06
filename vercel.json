@@ -1,15 +1,8 @@
 {
   "version": 2,
+  "framework": "vite",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "framework": "vite",
-  "functions": {
-    "api/**/*.ts": {
-      "runtime": "nodejs20.x",
-      "maxDuration": 30,
-      "memory": 1024
-    }
-  },
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/$1" },
     { "source": "/(.*)", "destination": "/index.html" }
@@ -20,7 +13,7 @@
       "headers": [
         { "key": "Access-Control-Allow-Origin", "value": "*" },
         { "key": "Access-Control-Allow-Methods", "value": "GET,POST,OPTIONS" },
-        { "key": "Access-Control-Allow-Headers", "value": "Content-Type,x-claude-key,x-groq-key,x-gemini-key,x-github-token,x-openrouter-key,x-deepseek-key" }
+        { "key": "Access-Control-Allow-Headers", "value": "Content-Type,x-claude-key,x-groq-key,x-gemini-key,x-github-token,x-openrouter-key,x-deepseek-key,x-vercel-token" }
       ]
     }
   ]
