@@ -30,19 +30,29 @@ function makeEntity(tableName) {
       Object.entries(filters).forEach(([k, v]) => { q = q.eq(k, v); });
       if (orderBy) { const d = orderBy.startsWith('-'); q = q.order(d ? orderBy.slice(1) : orderBy, { ascending: !d }); }
       if (limit) q = q.limit(limit);
-      const { data } = await q; return data || [];
+      const { data, error } = await q;
+      if (error) console.warn(`[base44] filter ${tableName}:`, error.message);
+      return data || [];
     },
     async create(data) {
       const sb = getSupabase(); if (!sb) return { id: Date.now().toString(), ...data };
-      const { data: row } = await sb.from(tableName).insert(data).select().single();
+      const { data: row, error } = await sb.from(tableName).insert(data).select().single();
+      if (error) console.warn(`[base44] create ${tableName}:`, error.message);
       return row || { id: Date.now().toString(), ...data };
     },
     async update(id, data) {
       const sb = getSupabase(); if (!sb) return data;
-      const { data: row } = await sb.from(tableName).update(data).eq('id', id).select().single();
+      const { data: row, error } = await sb.from(tableName).update(data).eq('id', id).select().single();
+      if (error) console.warn(`[base44] update ${tableName}:`, error.message);
       return row || data;
     },
-    async delete(id) { const sb = getSupabase(); if (sb) await sb.from(tableName).delete().eq('id', id); },
+    async delete(id) {
+      const sb = getSupabase();
+      if (sb) {
+        const { error } = await sb.from(tableName).delete().eq('id', id);
+        if (error) console.warn(`[base44] delete ${tableName}:`, error.message);
+      }
+    },
   };
 }
 
@@ -139,7 +149,8 @@ async function UploadFile({ file }) {
   const sb = getSupabase();
   if (!sb) return { file_url: URL.createObjectURL(file) };
   const path = `uploads/${Date.now()}_${file.name}`;
-  const { data } = await sb.storage.from('jarvis-files').upload(path, file);
+  const { data, error } = await sb.storage.from('jarvis-files').upload(path, file);
+  if (error) console.warn('[base44] UploadFile:', error.message);
   if (data) { const { data: u } = sb.storage.from('jarvis-files').getPublicUrl(path); return { file_url: u.publicUrl }; }
   return { file_url: URL.createObjectURL(file) };
 }

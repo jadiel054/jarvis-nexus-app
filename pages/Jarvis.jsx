@@ -158,7 +158,9 @@ export default function Jarvis() {
             : t
           ));
         }
-      } catch {}
+      } catch (e) {
+        console.warn('[JARVIS] Deploy poll error:', e.message);
+      }
     };
     // First poll after 30s, then every 5min
     const initial = setTimeout(() => {
@@ -190,7 +192,7 @@ export default function Jarvis() {
               : t
             ));
           }
-        }).catch(() => {});
+        }).catch(e => console.warn('[JARVIS] GitHub repo cache error:', e.message));
 
         // ── Supabase connection test ──
         testConnection().then(result => {
@@ -207,7 +209,7 @@ export default function Jarvis() {
             ));
             if (result.ok) logAgentSession('system', 'connection_test', { user: u.email, ok: true });
           }
-        }).catch(() => {});
+        }).catch(e => console.warn('[JARVIS] Supabase connection test error:', e.message));
 
         // ── Device security check ──
         if (!deviceCheckedRef.current) {
@@ -222,13 +224,18 @@ export default function Jarvis() {
             try {
               const { subject, body } = buildAlertEmail(getDeviceLabel(), ipInfo, false);
               await base44.integrations.Core.SendEmail({ to: u.email, subject, body });
-            } catch {}
+            } catch (e) {
+              console.warn('[JARVIS] Failed to send device alert email:', e.message);
+            }
             // Show challenge overlay
             setDeviceChallenge({ deviceId, deviceLabel: getDeviceLabel(), ipInfo });
           }
         }
       })
-      .catch(() => setAuthState('unauthenticated'));
+      .catch(e => {
+        console.warn('[JARVIS] Auth check failed:', e.message);
+        setAuthState('unauthenticated');
+      });
   }, []);
 
   useEffect(() => {
@@ -253,22 +260,30 @@ export default function Jarvis() {
         return `[${c.title}]: ${last}`;
       }).join('\n');
       return `\nMEMÓRIA DE SESSÕES ANTERIORES:\n${snippets}\n`;
-    } catch { return ''; }
+    } catch (e) {
+      console.warn('[JARVIS] Failed to load session memory:', e.message);
+      return '';
+    }
   }, [currentUser]);
 
   // ── Conversation persistence ──────────────────────────────────────
   const saveConversation = useCallback(async (msgs, convId, tabId) => {
     if (!currentUser || msgs.length < 2) return convId;
-    const title = msgs.find(m => m.role === 'user')?.content?.slice(0, 50) || 'Nova conversa';
-    if (convId) {
-      await base44.entities.Conversation.update(convId, { messages: msgs, last_message_at: Date.now() });
+    try {
+      const title = msgs.find(m => m.role === 'user')?.content?.slice(0, 50) || 'Nova conversa';
+      if (convId) {
+        await base44.entities.Conversation.update(convId, { messages: msgs, last_message_at: Date.now() });
+        return convId;
+      } else {
+        const created = await base44.entities.Conversation.create({
+          title, messages: msgs, user_email: currentUser.email, last_message_at: Date.now()
+        });
+        setTabs(prev => prev.map(t => t.id === tabId ? { ...t, convId: created.id, title } : t));
+        return created.id;
+      }
+    } catch (e) {
+      console.warn('[JARVIS] Failed to save conversation:', e.message);
       return convId;
-    } else {
-      const created = await base44.entities.Conversation.create({
-        title, messages: msgs, user_email: currentUser.email, last_message_at: Date.now()
-      });
-      setTabs(prev => prev.map(t => t.id === tabId ? { ...t, convId: created.id, title } : t));
-      return created.id;
     }
   }, [currentUser]);
 
@@ -341,6 +356,7 @@ export default function Jarvis() {
         body: JSON.stringify({ model: groqModel, messages: msgs, max_tokens: 1024 }),
       });
       if (res.ok) return (await res.json()).choices?.[0]?.message?.content || '';
+      console.warn(`[JARVIS] Groq API error: HTTP ${res.status}`);
     }
 
     // 💎 Gemini
@@ -355,6 +371,7 @@ export default function Jarvis() {
         }),
       });
       if (res.ok) return (await res.json()).candidates?.[0]?.content?.parts?.[0]?.text || '';
+      console.warn(`[JARVIS] Gemini API error: HTTP ${res.status}`);
     }
 
     // 🧠 Claude (direct API)
@@ -379,6 +396,7 @@ export default function Jarvis() {
         body: JSON.stringify({ model: 'claude-3-5-sonnet-20241022', max_tokens: 1024, system: systemPrompt, messages: history }),
       });
       if (res.ok) return (await res.json()).content?.[0]?.text || '';
+      console.warn(`[JARVIS] Claude API error: HTTP ${res.status}`);
     }
 
     // 🤖 Fallback — Base44 built-in
@@ -453,7 +471,10 @@ export default function Jarvis() {
   // ── GitHub repo handler (leitura + escrita) — usa cache de sessão ───
   const handleGitHubRequest = async (text) => {
     // Use session cache (auto-discovered) with fallback to manual list
-    const cachedRepos = await getRepoCache().catch(() => []);
+    const cachedRepos = await getRepoCache().catch(e => {
+      console.warn('[JARVIS] GitHub repo cache error:', e.message);
+      return [];
+    });
     const repoNames = cachedRepos.map(r => r.name);
 
     const findRepo = (hint) => repoNames.find(r => r.toLowerCase().includes(hint.toLowerCase())) || hint;
@@ -523,7 +544,9 @@ export default function Jarvis() {
         headers: { Accept: 'text/plain', 'X-Return-Format': 'markdown' },
       });
       if (res.ok) return (await res.text()).slice(0, 4000);
-    } catch {}
+    } catch (e) {
+      console.warn('[JARVIS] URL scan failed:', e.message);
+    }
     return `Não foi possível acessar automaticamente: ${url}`;
   };
 
@@ -619,7 +642,9 @@ export default function Jarvis() {
               reply = `✅ Todos os deploys estão funcionando normalmente:\n${deployData.deploys.map(d => `• **${d.name}** — ${d.state}`).join('\n')}`;
             }
           }
-        } catch {}
+        } catch (e) {
+          console.warn('[JARVIS] Deploy status check error:', e.message);
+        }
       }
 
       // ── database_oracle: ler/escrever memória de longo prazo ─────────
@@ -758,6 +783,7 @@ export default function Jarvis() {
             else reply = processBuiltins(text) || '';
           }
         } catch (e) {
+          console.warn('[JARVIS] Builtin/weather/distance handler error:', e.message);
           reply = '';
         }
       }
@@ -778,6 +804,7 @@ export default function Jarvis() {
             );
           }
         } catch (e) {
+          console.warn('[JARVIS] URL processing error:', e.message);
           reply = e.message === 'timeout' ? '⚠️ Erro ao consultar URL: timeout de 5s.' : '';
         }
       }
@@ -802,7 +829,7 @@ export default function Jarvis() {
                 };
                 setTabs(prev => prev.map(t => t.id === tid ? { ...t, messages: [...t.messages, suggestionMsg] } : t));
               }
-            }).catch(() => {});
+            }).catch(e => console.warn('[JARVIS] Upload commit analysis error:', e.message));
           }
         } else {
           const { file_url } = await base44.integrations.Core.UploadFile({ file });
@@ -812,15 +839,22 @@ export default function Jarvis() {
 
       // ── Memory Engine: extract + persist user facts in background ──
       if (text && currentUser?.email) {
-        processAndSaveMemory(text, currentUser.email, userMemoryRef.current).catch(() => {}).then(updated => {
-          if (updated) loadUserMemory(currentUser.email).then(m => { userMemoryRef.current = m; }).catch(() => {});
-        });
+        processAndSaveMemory(text, currentUser.email, userMemoryRef.current)
+          .catch(e => console.warn('[JARVIS] Memory save error:', e.message))
+          .then(updated => {
+            if (updated) loadUserMemory(currentUser.email)
+              .then(m => { userMemoryRef.current = m; })
+              .catch(e => console.warn('[JARVIS] Memory reload error:', e.message));
+          });
       }
 
       // ── Agent Router: detect specialist sub-agent ──
       const detectedAgent = text ? routeToAgent(text) : null;
       const persistentMemory = buildMemoryPrompt(userMemoryRef.current);
-      const sessionMemory = await getMemorySummary().catch(() => '');
+      const sessionMemory = await getMemorySummary().catch(e => {
+        console.warn('[JARVIS] Session memory summary error:', e.message);
+        return '';
+      });
       const combinedMemory = [persistentMemory, sessionMemory].filter(Boolean).join('\n');
 
       // ── Evolution Engine: intent analysis + style layer ──
@@ -874,7 +908,10 @@ ${!isVoiceMode ? styleLayer + personalityLayer : ''}`;
       }
 
       // ── Inject repo cache into prompt context ──
-      const cachedRepos = await getRepoCache().catch(() => []);
+      const cachedRepos = await getRepoCache().catch(e => {
+        console.warn('[JARVIS] Repo cache error:', e.message);
+        return [];
+      });
       if (cachedRepos.length > 0) {
         const repoList = cachedRepos.map(r => `${r.name}${r.language ? ` (${r.language})` : ''}`).join(', ');
         systemPrompt += `\n\nREPOSITÓRIOS GITHUB DISPONÍVEIS (cache de sessão): ${repoList}`;
@@ -893,7 +930,9 @@ ${!isVoiceMode ? styleLayer + personalityLayer : ''}`;
       try {
         const predictiveNote = predictiveContextScan(currentMsgs || [], settings.user_name || 'Jadiel');
         if (predictiveNote) reply += predictiveNote;
-      } catch {}
+      } catch (e) {
+        console.warn('[JARVIS] Predictive context scan error:', e.message);
+      }
 
       if (detectedAgent && !isVoiceMode) {
         reply = `${detectedAgent.icon} **[${detectedAgent.name}]**\n\n${reply}`;
@@ -922,7 +961,7 @@ ${!isVoiceMode ? styleLayer + personalityLayer : ''}`;
     setTabs(prev => prev.map(t => {
       if (t.id === tid) {
         const newMsgs = [...(currentMsgs || t.messages), assistantMessage];
-        saveConversation(newMsgs, t.convId, tid).catch(() => {});
+        saveConversation(newMsgs, t.convId, tid).catch(e => console.warn('[JARVIS] Conversation save error:', e.message));
         return { ...t, messages: newMsgs };
       }
       return t;

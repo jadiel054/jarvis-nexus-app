@@ -79,7 +79,8 @@ export function useElevenLabsSpeech() {
       
       await audio.play();
       return true;
-    } catch {
+    } catch (e) {
+      console.warn('[ElevenLabs] TTS playback failed:', e.message);
       setIsSpeaking(false);
       return false;
     }

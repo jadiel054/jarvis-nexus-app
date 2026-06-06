@@ -10,13 +10,18 @@ export default function ConversationHistory({ currentMessages, onLoadConversatio
 
   const loadConversations = async () => {
     setLoading(true);
-    const data = await base44.entities.Conversation.filter(
-      { user_email: userEmail },
-      '-last_message_at',
-      20
-    );
-    setConversations(data);
-    setLoading(false);
+    try {
+      const data = await base44.entities.Conversation.filter(
+        { user_email: userEmail },
+        '-last_message_at',
+        20
+      );
+      setConversations(data);
+    } catch (e) {
+      console.warn('[ConversationHistory] Failed to load conversations:', e.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -25,8 +30,12 @@ export default function ConversationHistory({ currentMessages, onLoadConversatio
 
   const handleDelete = async (e, id) => {
     e.stopPropagation();
-    await base44.entities.Conversation.delete(id);
-    setConversations(prev => prev.filter(c => c.id !== id));
+    try {
+      await base44.entities.Conversation.delete(id);
+      setConversations(prev => prev.filter(c => c.id !== id));
+    } catch (err) {
+      console.warn('[ConversationHistory] Failed to delete conversation:', err.message);
+    }
   };
 
   return (

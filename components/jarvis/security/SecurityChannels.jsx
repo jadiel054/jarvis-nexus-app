@@ -114,7 +114,9 @@ function ChannelRow({ type, icon: Icon, label, placeholder, channelKey }) {
             <p style="color:#4a7a8a;font-size:11px;margin-top:12px">Este código expira em 10 minutos. Não compartilhe com ninguém.</p>
           </div>`
         });
-      } catch {}
+      } catch (e) {
+        console.warn('[Security] Failed to send OTP email:', e.message);
+      }
     }
     // For WhatsApp/phone — show code on screen (no API integration)
     setOtpSent(true);
