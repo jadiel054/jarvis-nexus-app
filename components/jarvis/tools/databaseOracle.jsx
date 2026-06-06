@@ -90,7 +90,8 @@ async function _fallbackRead(key, originalError) {
       if (fact) return { found: true, key, value: fact.value, source: 'userSettings' };
     }
     return { found: false, key, value: null, warning: `Supabase: ${originalError}` };
-  } catch {
+  } catch (e) {
+    console.warn('[Oracle] Fallback read also failed:', e.message);
     return { found: false, key, value: null, error: originalError };
   }
 }

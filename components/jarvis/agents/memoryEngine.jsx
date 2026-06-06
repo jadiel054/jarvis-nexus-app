@@ -77,7 +77,8 @@ export async function loadUserMemory(userEmail) {
       summary: settings.memory_summary || '',
       id: settings.id,
     };
-  } catch {
+  } catch (e) {
+    console.warn('[Memory] Failed to load user memory:', e.message);
     return { facts: FIXED_CREATOR_FACTS, summary: '' };
   }
 }
@@ -120,7 +121,9 @@ export async function saveMemoryFacts(userEmail, newFacts, existingMemory) {
         memory_summary: '',
       });
     }
-  } catch {}
+  } catch (e) {
+    console.warn('[Memory] Failed to save facts:', e.message);
+  }
 }
 
 // ── Gera resumo de memória para o prompt ─────────────────────────────────────

@@ -95,7 +95,9 @@ Baseado nestas mensagens recentes: "${recentText.slice(0, 300)}"
 Gere UMA dica preditiva muito curta (máx 1 frase) do que ele provavelmente precisará a seguir.
 Responda em português, no estilo JARVIS — inteligente e direto. Sem prefixo.`,
     });
-  } catch {}
+  } catch (e) {
+    console.warn('[Predictive] Failed to generate AI insight:', e.message);
+  }
 
   const scanReport = `---
 🔭 **ANÁLISE PREDITIVA — VARREDURA DE CONTEXTO**

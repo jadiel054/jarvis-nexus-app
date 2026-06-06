@@ -24,7 +24,10 @@ export async function getRepoCache() {
     const data = await res.json();
     _repoCache = data.map(r => ({ name: r.name, full_name: r.full_name, private: r.private, language: r.language, stars: r.stargazers_count, url: r.html_url }));
     return _repoCache;
-  } catch { _repoCache = []; return []; }
+  } catch (e) {
+    console.warn('[GitOperator] Failed to fetch repo cache:', e.message);
+    _repoCache = []; return [];
+  }
 }
 
 export function invalidateRepoCache() { _repoCache = null; }
@@ -51,7 +54,9 @@ async function resolveRepo(repo) {
         const repoRes = await fetch(`https://api.github.com/repos/${login}/${repo}`, { headers: { Authorization: `Bearer ${token}` } });
         if (repoRes.ok) return repo; // Exists — use as-is
       }
-    } catch {}
+    } catch (e) {
+      console.warn('[GitOperator] Failed to resolve repo:', e.message);
+    }
   }
   return repo; // Fallback: use what the user said
 }
@@ -95,8 +100,8 @@ export async function gitOperatorCommitAndPR(filePath, content, description, rep
         await logAgentSession('git_operator', 'commit_and_pr', { repo: targetRepo, filePath, prUrl: edgeResult.prUrl });
         return { ...edgeResult, sandboxResult, source: 'edge_function' };
       }
-    } catch {
-      // Fall through to direct API
+    } catch (e) {
+      console.warn('[GitOperator] Edge function failed, falling back to direct API:', e.message);
     }
   }
 

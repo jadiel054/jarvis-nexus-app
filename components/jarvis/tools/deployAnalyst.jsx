@@ -135,7 +135,8 @@ export async function pollDeployStatus() {
       messages.push(formatDiagnosisMessage(result));
     }
     return messages;
-  } catch {
+  } catch (e) {
+    console.warn('[DeployAnalyst] Poll failed:', e.message);
     return [];
   }
 }

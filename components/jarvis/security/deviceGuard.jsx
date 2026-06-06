@@ -42,7 +42,9 @@ export async function getIpInfo() {
       const d = await res.json();
       return { ip: d.ip, city: d.city, country: d.country_name, region: d.region };
     }
-  } catch {}
+  } catch (e) {
+    console.warn('[DeviceGuard] Failed to fetch IP info:', e.message);
+  }
   return { ip: 'desconhecido', city: '—', country: '—', region: '—' };
 }
 

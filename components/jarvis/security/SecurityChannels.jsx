@@ -38,7 +38,8 @@ function BiometricRegistration() {
       channels[type === 'touch' ? 'touch_id' : 'face_id'] = true;
       saveChannels(channels);
       setter('success');
-    } catch {
+    } catch (e) {
+      console.warn('[Security] Biometric linking failed:', e.message);
       setter('fail');
       setTimeout(() => setter('idle'), 2500);
     }
@@ -117,7 +118,9 @@ function ChannelRow({ type, icon: Icon, label, placeholder, channelKey }) {
             <p style="color:#4a7a8a;font-size:11px;margin-top:12px">Este código expira em 10 minutos. Não compartilhe com ninguém.</p>
           </div>`
         });
-      } catch {}
+      } catch (e) {
+        console.warn('[Security] Failed to send OTP email:', e.message);
+      }
     }
     // For WhatsApp/phone — show code on screen (no API integration)
     setOtpSent(true);
