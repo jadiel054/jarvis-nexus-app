@@ -39,7 +39,8 @@ export default function BiometricGate({ onSuccess, onCancel }) {
           rpId: window.location.hostname || 'localhost', allowCredentials: [] },
       });
       onSuccess();
-    } catch {
+    } catch (e) {
+      console.warn('[BiometricGate] Biometric auth failed:', e.message);
       setMode('pin');
     }
   };

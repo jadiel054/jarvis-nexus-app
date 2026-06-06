@@ -22,7 +22,8 @@ export async function loadEvolutionProfile(userEmail) {
       messageCount: s.message_count || 0,
       lastSyncAt: s.last_sync_at || 0,
     };
-  } catch {
+  } catch (e) {
+    console.warn('[Evolution] Failed to load profile:', e.message);
     return defaultProfile();
   }
 }
@@ -60,7 +61,9 @@ export async function saveEvolutionProfile(userEmail, profile) {
     } else {
       await base44.entities.UserSettings.create({ user_name: 'Usuário', ...data });
     }
-  } catch {}
+  } catch (e) {
+    console.warn('[Evolution] Failed to save profile:', e.message);
+  }
 }
 
 // ── Registra feedback de like ─────────────────────────────────────────────────

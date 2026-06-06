@@ -281,7 +281,8 @@ export default function IntegrationsPanel({ onCredentialsChange }) {
         setStatuses(s => ({ ...s, github: 'error' }));
         setInfo(i => ({ ...i, github: null }));
       }
-    } catch {
+    } catch (e) {
+      console.warn('[Integrations] GitHub connection test failed:', e.message);
       setStatuses(s => ({ ...s, github: 'error' }));
     }
   };
@@ -303,7 +304,8 @@ export default function IntegrationsPanel({ onCredentialsChange }) {
         setStatuses(s => ({ ...s, vercel: 'error' }));
         setInfo(i => ({ ...i, vercel: null }));
       }
-    } catch {
+    } catch (e) {
+      console.warn('[Integrations] Vercel connection test failed:', e.message);
       setStatuses(s => ({ ...s, vercel: 'error' }));
     }
   };

@@ -62,7 +62,7 @@ export default function BiometricGuard({ onAuthenticated, onClose }) {
         return;
       }
     } catch (err) {
-      // Auth failed or no biometric credential registered
+      console.warn('[Biometric] Auth failed or no credential registered:', err.message);
     }
 
     // Fallback: try navigator.credentials with simple platform authenticator check
