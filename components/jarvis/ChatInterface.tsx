@@ -271,7 +271,7 @@ function ToolCard({ tc }: { tc: ToolCall }) {
       );
       return <KnowledgeCard results={(out.results as Record<string,string>[])} query={tc.input.query as string} />;
     }
-    if (tc.status === "running") return (
+    if (tc.status === "running as string") return (
       <div style={{ padding: "8px 12px", background: "rgba(191,0,255,0.04)", border: "1px solid rgba(191,0,255,0.2)", borderRadius: 10, display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ width: 14, height: 14, borderRadius: "50%", border: "1.5px solid rgba(191,0,255,0.3)", borderTopColor: "var(--neon-purple)", animation: "ldrs-spin .8s linear infinite", display: "inline-block" }} />
         <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Recuperando conhecimento...</span>
