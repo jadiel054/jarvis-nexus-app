@@ -198,41 +198,15 @@ async function processFile(file: File): Promise<Attachment> {
 function buildAttachmentContext(attachments: Attachment[]): string {
   if (attachments.length === 0) return "";
   const parts = attachments.map(att => {
-    if (att.type === "link") return `[Link anexado: ${att.url}]
-Busque e analise o conteúdo desse link usando tavily_search.`;
-    if (att.type === "image") return `[Imagem anexada: ${att.name} — ${att.size ? Math.round(att.size/1024) + "KB" : ""}]
-A imagem foi incluída na mensagem acima em base64.`;
-    if (att.type === "pdf") return `[PDF anexado: ${att.name}]
-Conteúdo extraído:
-\`\`\`
-${att.text?.slice(0, 8000)}
-\`\`\``;
-    if (att.type === "word") return `[Word (.docx) anexado: ${att.name}]
-Conteúdo:
-\`\`\`
-${att.text?.slice(0, 8000)}
-\`\`\``;
-    if (att.type === "excel") return `[Excel/CSV anexado: ${att.name}]
-Dados:
-\`\`\`
-${att.text?.slice(0, 8000)}
-\`\`\``;
-    if (att.type === "html") return `[HTML anexado: ${att.name}]
-\`\`\`html
-${att.text?.slice(0, 8000)}
-\`\`\``;
-    return `[Arquivo: ${att.name}]
-\`\`\`
-${att.text?.slice(0, 6000)}
-\`\`\``;
+    if (att.type === "link") return "[Link anexado: " + att.url + "]\nBusque e analise o conteúdo desse link usando tavily_search.";
+    if (att.type === "image") return "[Imagem anexada: " + att.name + "]\nA imagem foi incluída na mensagem acima em base64.";
+    if (att.type === "pdf") return "[PDF anexado: " + att.name + "]\nConteúdo:\n```\n" + (att.text?.slice(0, 8000) || "") + "\n```";
+    if (att.type === "word") return "[Word: " + att.name + "]\nConteúdo:\n```\n" + (att.text?.slice(0, 8000) || "") + "\n```";
+    if (att.type === "excel") return "[Excel: " + att.name + "]\nDados:\n```\n" + (att.text?.slice(0, 8000) || "") + "\n```";
+    if (att.type === "html") return "[HTML: " + att.name + "]\n```html\n" + (att.text?.slice(0, 8000) || "") + "\n```";
+    return "[Arquivo: " + att.name + "]\n```\n" + (att.text?.slice(0, 6000) || "") + "\n```";
   });
-  return "
-
----
-**Arquivos anexados:**
-" + parts.join("
-
-");
+  return "\n\n---\n**Arquivos anexados:**\n" + parts.join("\n\n");
 }
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
