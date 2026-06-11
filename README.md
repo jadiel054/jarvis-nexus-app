@@ -116,3 +116,4 @@ Para migrar para Supabase completo, substituir as chamadas do store pelos endpoi
 - `POST /api/supabase/memory` para memórias
 - As conversas podem ser salvas na tabela `conversations` + `messages`
 # Jarvis Nexus v7.0
+...
