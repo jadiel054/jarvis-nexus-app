@@ -126,7 +126,6 @@ const JarvisTTS = {
     this._speaking = true;
     utt.onend = () => { this._speaking = false; };
   },
-
   stop(): void {
     if (this._audio) { this._audio.pause(); this._audio = null; }
     if (window.speechSynthesis) window.speechSynthesis.cancel();
@@ -258,7 +257,6 @@ const TOOL_LABELS: Record<string, { label: string; icon: string }> = {
   jarvis_plan:             { label: "Criando plano de execução", icon: "📋" },
   jarvis_update_step:      { label: "Atualizando progresso", icon: "✅" },
 };
-
 function ToolCard({ tc }: { tc: ToolCall }) {
   // Special: memory_search with results → Knowledge card
   if (tc.name === "memory_search" && tc.status === "done") {
@@ -271,7 +269,7 @@ function ToolCard({ tc }: { tc: ToolCall }) {
       );
       return <KnowledgeCard results={(out.results as Record<string,string>[])} query={tc.input.query as string} />;
     }
-    if (tc.status !== "done" && tc.status !== "error") return (
+    if (tc.status === "running") return (
       <div style={{ padding: "8px 12px", background: "rgba(191,0,255,0.04)", border: "1px solid rgba(191,0,255,0.2)", borderRadius: 10, display: "flex", alignItems: "center", gap: 8 }}>
         <span style={{ width: 14, height: 14, borderRadius: "50%", border: "1.5px solid rgba(191,0,255,0.3)", borderTopColor: "var(--neon-purple)", animation: "ldrs-spin .8s linear infinite", display: "inline-block" }} />
         <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Recuperando conhecimento...</span>
@@ -294,10 +292,10 @@ function ToolCard({ tc }: { tc: ToolCall }) {
       </div>
       <div style={{ padding: "6px 12px 8px" }}>
         <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 11, color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{args || "–"}</div>
-        {tc.status === "done" && (tc.output as Record<string,unknown>)?.error && (
-          <div style={{ marginTop: 4, fontSize: 11, color: "var(--neon-pink)", fontFamily: "JetBrains Mono,monospace" }}>✕ {(tc.output as Record<string,string>).error}</div>
+        {tc.status === "done" && Boolean((tc.output as Record<string,unknown>)?.error) && (
+          <div style={{ marginTop: 4, fontSize: 11, color: "var(--neon-pink)", fontFamily: "JetBrains Mono,monospace" }}>✕ {String((tc.output as Record<string,unknown>).error)}</div>
         )}
-        {tc.status === "done" && !(tc.output as Record<string,unknown>)?.error && (
+        {tc.status === "done" && !((tc.output as Record<string,unknown>)?.error) && (
           <div style={{ marginTop: 4, fontSize: 11, color: "var(--neon-green)", fontFamily: "JetBrains Mono,monospace" }}>
             ✓ {Array.isArray(tc.output) ? `${(tc.output as unknown[]).length} item(s)` : (tc.output as Record<string,unknown>)?.commit_url ? "Commitado" : (tc.output as Record<string,unknown>)?.pr_url ? "PR criado" : "Concluído"}
           </div>
@@ -334,7 +332,6 @@ function KnowledgeCard({ results, query }: { results: Record<string,string>[]; q
     </div>
   );
 }
-
 // ── PLANNER PANEL ─────────────────────────────────────────────
 function PlannerPanel({ plan }: { plan: Plan }) {
   const done = plan.steps.filter(s => s.status === "done").length;
@@ -369,11 +366,13 @@ function PlannerPanel({ plan }: { plan: Plan }) {
 
 // ── ACTION CARDS ──────────────────────────────────────────────
 const ACTION_CARDS = [
+  const ACTION_CARDS = [
   { icon: "🐙", title: "LISTAR REPOS", desc: "Ver seus repositórios GitHub", prompt: "Liste todos os meus repositórios no GitHub" },
   { icon: "🔬", title: "ANALISAR REPO", desc: "Análise profunda de um projeto", prompt: "Analise o repositório jadiel054/jarvis-nexus-app" },
   { icon: "🗂️", title: "MAPEAR PROJETO", desc: "Estrutura completa de arquivos", prompt: "Mapeie a estrutura do repo jadiel054/zarith-saas-web" },
   { icon: "🌐", title: "PESQUISAR", desc: "Busca web em tempo real", prompt: "Pesquise sobre as novidades do Next.js 15" },
 ];
+
 // ── MAIN COMPONENT ────────────────────────────────────────────
 export function ChatInterface() {
   const { messages, agentStatus, streamingText, addMessage, updateMessage, setAgentStatus, setStreamingText, persistMessages } = useChatStore();
@@ -479,7 +478,7 @@ export function ChatInterface() {
                 updateMessage(assistantId, { plan: event.plan });
               }
               break;
-            }
+              }
             case "plan_update": {
               if (currentPlan && event.step_index !== undefined && event.status) {
                 updatePlanStep(event.step_index, event.status, event.note);
@@ -495,7 +494,24 @@ export function ChatInterface() {
                 const tc: ToolCall = { id: event.id, name: event.name, input: event.input || {}, status: "running" };
                 allToolCalls = [...allToolCalls, tc];
                 // Auto-advance plan step
-              if (currentPlan) {
+                if (currentPlan) {
+                  const pendingIdx = currentPlan.steps.findIndex(s => s.status === "pending");
+                  if (pendingIdx !== -1) {
+                    updatePlanStep(pendingIdx, "running");
+                    const updatedSteps = currentPlan.steps.map((s, i) => i === pendingIdx ? { ...s, status: "running" as const } : s);
+                    currentPlan = { ...currentPlan, steps: updatedSteps };
+                  }
+                }
+                updateMessage(assistantId, { toolCalls: [...allToolCalls] });
+              }
+              break;
+            }
+            case "tool_result": {
+              if (event.id) {
+                const failed = (event.content as Record<string,unknown>)?.error;
+                allToolCalls = allToolCalls.map(tc => tc.id === event.id ? { ...tc, status: failed ? "error" : "done", output: event.content } : tc);
+                // Advance plan step
+                if (currentPlan) {
                   const runningIdx = currentPlan.steps.findIndex(s => s.status === "running");
                   if (runningIdx !== -1) {
                     const newStatus = failed ? "error" : "done";
@@ -566,7 +582,6 @@ export function ChatInterface() {
       if (!ttsEnabled) JarvisTTS.stop();
     }
   }, [ttsEnabled]);
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
@@ -597,6 +612,7 @@ export function ChatInterface() {
             </div>
           </div>
         )}
+
         {messages.map(msg => (
           <div key={msg.id} style={{ animation: "fade-in .3s ease forwards" }}>
             <div style={{ display: "flex", flexDirection: msg.role === "user" ? "row-reverse" : "row", gap: 12 }}>
@@ -653,7 +669,6 @@ export function ChatInterface() {
         ))}
         <div ref={messagesEndRef} />
       </div>
-
       {/* Scroll to bottom */}
       {showScrollBtn && (
         <button onClick={() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); setShowScrollBtn(false); }}
@@ -665,7 +680,7 @@ export function ChatInterface() {
       {/* Quick hints */}
       <div style={{ padding: "4px 20px 0", display: "flex", gap: 6, flexWrap: "wrap", background: "rgba(2,2,8,.95)" }}>
         {[
-        { label: "⚙ settings", cmd: "abra settings" },
+          { label: "⚙ settings", cmd: "abra settings" },
           { label: "🐙 repos", cmd: "liste meus repositórios" },
           { label: "🔬 analisar", cmd: "analise o repo jadiel054/jarvis-nexus-app" },
           { label: "▲ vercel", cmd: "liste meus projetos no Vercel" },
@@ -789,9 +804,10 @@ export function ChatInterface() {
           <button onClick={() => {
             const SR = (window as Window & typeof globalThis & { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown }).SpeechRecognition || (window as Window & typeof globalThis & { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
             if (!SR) { showToast("Voz não suportada nesse browser", "error"); return; }
-            const r = new (SR as new () => SpeechRecognition)();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const r = new (SR as new () => any)();
             r.lang = "pt-BR";
-            r.onresult = (e: SpeechRecognitionEvent) => { setInput(prev => (prev ? prev + " " : "") + e.results[0][0].transcript); };
+            r.onresult = (e: any) => { setInput((prev: string) => (prev ? prev + " " : "") + e.results[0][0].transcript); };
             r.onerror = () => showToast("Não foi possível capturar a voz", "error");
             r.start();
             showToast("🎤 Ouvindo...", "info", 3000);
@@ -824,4 +840,4 @@ export function ChatInterface() {
       </div>
     </div>
   );
-                                       }
+}
