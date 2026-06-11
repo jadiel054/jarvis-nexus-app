@@ -366,7 +366,7 @@ function PlannerPanel({ plan }: { plan: Plan }) {
 
 // ── ACTION CARDS ──────────────────────────────────────────────
 const ACTION_CARDS = [
-  const ACTION_CARDS = [
+  
   { icon: "🐙", title: "LISTAR REPOS", desc: "Ver seus repositórios GitHub", prompt: "Liste todos os meus repositórios no GitHub" },
   { icon: "🔬", title: "ANALISAR REPO", desc: "Análise profunda de um projeto", prompt: "Analise o repositório jadiel054/jarvis-nexus-app" },
   { icon: "🗂️", title: "MAPEAR PROJETO", desc: "Estrutura completa de arquivos", prompt: "Mapeie a estrutura do repo jadiel054/zarith-saas-web" },
