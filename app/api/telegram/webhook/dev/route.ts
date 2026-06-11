@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
         try { const ev = JSON.parse(line.slice(6)); if (ev.type === "response") finalText += ev.content; } catch {}
       }
     }
-    const chunks = (finalText || "Processado.").match(/.{1,4000}/gs) || [finalText];
+    const chunks = (finalText || "Processado.").match(/[\s\S]{1,4000}/g) || [finalText];
     for (const chunk of chunks) {
       await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: "POST", headers: { "Content-Type": "application/json" },
