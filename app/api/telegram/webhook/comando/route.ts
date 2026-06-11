@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
     if (!finalText) finalText = "Processado. Sem resposta de texto.";
 
     // Send response back via Telegram (Markdown, split if > 4096 chars)
-    const chunks = finalText.match(/.{1,4000}/gs) || [finalText];
+    const chunks = finalText.match(/[\s\S]{1,4000}/g) || [finalText];
     for (const chunk of chunks) {
       await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
         method: "POST",
