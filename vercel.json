@@ -2,16 +2,7 @@
   "crons": [
     {
       "path": "/api/nexus/tick",
-      "schedule": "*/1 * * * *"
-    }
-  ],
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" },
-        { "key": "Access-Control-Allow-Methods", "value": "GET,POST,PUT,DELETE,OPTIONS" }
-      ]
+      "schedule": "0 * * * *"
     }
   ]
 }
