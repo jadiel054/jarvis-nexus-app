@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { BootSequence } from "@/components/jarvis/BootSequence";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { TopBar } from "@/components/layout/TopBar";
-import { ChatInterface } from "@/components/jarvis/ChatInterface";
+import ChatInterface from "@/components/jarvis/ChatInterface";
 import { SettingsPanel } from "@/components/jarvis/SettingsPanel";
 import { MemoriesPanel } from "@/components/jarvis/MemoriesPanel";
 import { ToastContainer } from "@/components/ui/Toast";
