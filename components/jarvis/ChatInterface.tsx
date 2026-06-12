@@ -534,7 +534,7 @@ export function ChatInterface() {
             }
             case "done": {
               // Auto-speak with TTS if enabled
-              if (ttsEnabled && finalText) {
+              if (JarvisTTS._enabled && finalText) {
                 JarvisTTS.speak(finalText);
               }
               // Finalize plan
