@@ -162,7 +162,12 @@ export async function toolExecutor(name: string, input: Record<string, any>): Pr
         const r = await gh(url);
         if (!r.ok) return { error: `GitHub ${r.status}` };
         const d = await r.json();
-        return d.map((c: Record<string,unknown>) => ({ sha: (c.sha as string)?.slice(0,7), message: (c.commit as Record<string,Record<string,string>>)?.message?.message?.split("\n")[0] || (c.commit as Record<string,Record<string,string>>)?.message?.split?.("\n")?.[0], date: (c.commit as Record<string,Record<string,string>>)?.author?.date, url: c.html_url }));
+        return d.map((c: Record<string,unknown>) => ({ 
+          sha: (c.sha as string)?.slice(0,7), 
+          message: ((c.commit as any)?.message || "").toString().split("\n")[0], 
+          date: (c.commit as any)?.author?.date, 
+          url: c.html_url 
+        }));
       }
 
       case "github_analyze_repo": {
@@ -185,7 +190,7 @@ export async function toolExecutor(name: string, input: Record<string, any>): Pr
         }
 
         const commitsR = await gh(`/repos/${owner}/${repo}/commits?per_page=5`);
-        const recent = commitsR.ok ? (await commitsR.json()).map((c: Record<string,unknown>) => ({ sha: (c.sha as string)?.slice(0,7), message: ((c.commit as Record<string,Record<string,string>>)?.message || "").split("\n")[0], date: (c.commit as Record<string,Record<string,string>>)?.author?.date })) : [];
+        const recent = commitsR.ok ? (await commitsR.json()).map((c: Record<string,unknown>) => ({ sha: (c.sha as string)?.slice(0,7), message: ((c.commit as any)?.message || "").toString().split("\n")[0], date: (c.commit as any)?.author?.date })) : [];
 
         return { name: repoData.name, language: repoData.language, description: repoData.description, topics: repoData.topics, total_files: files.length, key_files: files.filter(f => ["package.json","tsconfig.json","next.config.ts","vite.config.ts","README.md","Dockerfile","vercel.json"].includes(f.split("/").pop()!)), stack: { framework: files.some(f => f === "next.config.ts"||f==="next.config.js") ? "Next.js" : files.some(f => f === "vite.config.ts") ? "Vite/React" : "Desconhecido", has_typescript: files.some(f => f.endsWith(".ts")||f.endsWith(".tsx")), has_tests: files.some(f => f.includes("test")||f.includes("spec")), has_docker: files.some(f => f === "Dockerfile"), has_ci: files.some(f => f.includes(".github/workflows")) }, dependencies: deps, recent_commits: recent };
       }
