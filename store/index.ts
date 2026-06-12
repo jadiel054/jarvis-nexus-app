@@ -170,8 +170,8 @@ export const useUIStore = create<UIState>()((set, get) => ({
   ttsEnabled: false,
   convSearch: "",
   activePlan: null,
-  aiProvider: (() => { try { return localStorage.getItem("jarvis_ai_provider") || "anthropic"; } catch { return "anthropic"; } })(),
-  aiModel: (() => { try { return localStorage.getItem("jarvis_ai_model") || "claude-sonnet-4-6"; } catch { return "claude-sonnet-4-6"; } })(),
+  aiProvider: (() => { try { return localStorage.getItem("jarvis_ai_provider") || "groq"; } catch { return "groq"; } })(),
+  aiModel: (() => { try { return localStorage.getItem("jarvis_ai_model") || "llama-3.3-70b-versatile"; } catch { return "llama-3.3-70b-versatile"; } })(),
 
   setSidebarOpen: (v) => set({ sidebarOpen: v }),
   setShowSettings: (v) => set({ showSettings: v }),

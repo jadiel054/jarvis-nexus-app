@@ -9,15 +9,15 @@ export const maxDuration = 120;
 
 // ── PROVIDER / MODEL CONFIG ──────────────────────────────────────────────
 const PROVIDERS = {
-  anthropic: {
-    envKey: "ANTHROPIC_API_KEY",
-    models: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001"],
-    defaultModel: "claude-sonnet-4-6",
-  },
   groq: {
     envKey: "GROQ_API_KEY",
     models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it", "mixtral-8x7b-32768"],
     defaultModel: "llama-3.3-70b-versatile",
+  },
+  anthropic: {
+    envKey: "ANTHROPIC_API_KEY",
+    models: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001"],
+    defaultModel: "claude-sonnet-4-6",
   },
   openrouter: {
     envKey: "OPENROUTER_API_KEY",
@@ -38,7 +38,8 @@ const PROVIDERS = {
 
 type ProviderId = keyof typeof PROVIDERS;
 
-const FALLBACK_ORDER: ProviderId[] = ["anthropic", "groq", "openrouter", "openai", "gemini"];
+// Groq first, then Anthropic, then free providers
+const FALLBACK_ORDER: ProviderId[] = ["groq", "anthropic", "openrouter", "openai", "gemini"];
 
 // ── NON-ANTHROPIC PROVIDER FETCH ─────────────────────────────────────────
 async function fetchSimpleProvider(
@@ -49,8 +50,6 @@ async function fetchSimpleProvider(
   messages: { role: string; content: string }[],
   send: (event: object) => void
 ): Promise<void> {
-  const cfg = PROVIDERS[provider];
-
   if (provider === "openai") {
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
@@ -67,7 +66,6 @@ async function fetchSimpleProvider(
     }
     const data = await res.json();
     const text = data.choices?.[0]?.message?.content || "";
-    // Stream in small chunks for visual effect
     const chunkSize = 6;
     for (let i = 0; i < text.length; i += chunkSize) {
       send({ type: "response", content: text.slice(i, i + chunkSize) });
@@ -134,7 +132,6 @@ async function fetchSimpleProvider(
 
   if (provider === "gemini") {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    // Convert messages to Gemini format
     const contents = messages.map(m => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content }],
@@ -262,6 +259,38 @@ async function runAnthropicLoop(
   send({ type: "done" });
 }
 
+// ── FALLBACK: try every provider until one works ─────────────────────────
+async function tryFallbackChain(
+  skipProvider: ProviderId | null,
+  system: string,
+  messages: { role: string; content: string }[],
+  send: (event: object) => void
+): Promise<boolean> {
+  for (const fb of FALLBACK_ORDER) {
+    if (fb === skipProvider) continue;
+    const fbKey = process.env[PROVIDERS[fb].envKey];
+    if (!fbKey) continue;
+
+    const fbModel = PROVIDERS[fb].defaultModel;
+    send({ type: "thinking", content: `🔄 Tentando ${fb}/${fbModel}...` });
+
+    try {
+      if (fb === "anthropic") {
+        const client = new Anthropic({ apiKey: fbKey });
+        await runAnthropicLoop(client, fbModel, system, messages, send);
+      } else {
+        await fetchSimpleProvider(fb, fbModel, fbKey, system, messages, send);
+      }
+      return true;
+    } catch (fbError) {
+      const msg = (fbError as Error).message;
+      send({ type: "thinking", content: `⚠️ ${fb} falhou: ${msg.slice(0, 80)}` });
+    }
+  }
+
+  return false;
+}
+
 // ── MAIN HANDLER ─────────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
   const { messages, memoryContext, provider, model } = await req.json();
@@ -278,74 +307,46 @@ export async function POST(req: NextRequest) {
       };
 
       try {
-        // Determine provider and model
-        let selectedProvider: ProviderId = (provider as ProviderId) || "anthropic";
-        let selectedModel: string = model || PROVIDERS[selectedProvider]?.defaultModel || "claude-sonnet-4-6";
+        // Determine provider and model — default to groq
+        let selectedProvider: ProviderId = (provider as ProviderId) || "groq";
+        let selectedModel: string = model || PROVIDERS[selectedProvider]?.defaultModel || "llama-3.3-70b-versatile";
 
         // Validate provider
         if (!PROVIDERS[selectedProvider]) {
-          selectedProvider = "anthropic";
-          selectedModel = "claude-sonnet-4-6";
+          selectedProvider = "groq";
+          selectedModel = "llama-3.3-70b-versatile";
         }
 
         // Check if requested provider has API key
-        const apiKey = process.env[PROVIDERS[selectedProvider].envKey];
+        let apiKey = process.env[PROVIDERS[selectedProvider].envKey];
 
         if (!apiKey) {
           // Try fallback chain
-          let found = false;
-          for (const fb of FALLBACK_ORDER) {
-            const fbKey = process.env[PROVIDERS[fb].envKey];
-            if (fbKey) {
-              selectedProvider = fb;
-              selectedModel = PROVIDERS[fb].defaultModel;
-              found = true;
-              break;
-            }
+          send({ type: "thinking", content: `⚠️ API key não configurada para ${selectedProvider}. Buscando fallback...` });
+          const recovered = await tryFallbackChain(null, system, messages, send);
+          if (!recovered) {
+            send({ type: "error", message: "Configure uma API key nas Configurações — nenhum provider disponível." });
           }
-          if (!found) {
-            send({ type: "error", message: "Configure a API key nas Configurações — nenhum provider disponível." });
-            controller.close();
-            return;
-          }
-          send({ type: "thinking", content: `⚠️ API key não configurada para ${provider}. Usando fallback: ${selectedProvider}/${selectedModel}` });
+          controller.close();
+          return;
         }
 
-        const finalApiKey = process.env[PROVIDERS[selectedProvider].envKey]!;
-
-        // Route to Anthropic agentic loop or simple provider
-        if (selectedProvider === "anthropic") {
-          try {
-            const client = new Anthropic({ apiKey: finalApiKey });
+        // Try the selected provider; on failure, run fallback chain
+        try {
+          if (selectedProvider === "anthropic") {
+            const client = new Anthropic({ apiKey });
             await runAnthropicLoop(client, selectedModel, system, messages, send);
-          } catch (error) {
-            const errMsg = (error as Error).message;
-            // If Anthropic fails (credits, etc.), try fallback chain
-            if (errMsg.includes("credit") || errMsg.includes("429") || errMsg.includes("auth")) {
-              let recovered = false;
-              for (const fb of FALLBACK_ORDER) {
-                if (fb === "anthropic") continue;
-                const fbKey = process.env[PROVIDERS[fb].envKey];
-                if (fbKey) {
-                  send({ type: "thinking", content: `⚠️ Anthropic indisponível (${errMsg.slice(0, 60)}). Fallback: ${fb}/${PROVIDERS[fb].defaultModel}` });
-                  try {
-                    await fetchSimpleProvider(fb, PROVIDERS[fb].defaultModel, fbKey, system, messages, send);
-                    recovered = true;
-                    break;
-                  } catch (fbError) {
-                    send({ type: "thinking", content: `⚠️ ${fb} também falhou: ${(fbError as Error).message.slice(0, 60)}` });
-                  }
-                }
-              }
-              if (!recovered) {
-                send({ type: "error", message: `Anthropic falhou e nenhum fallback disponível: ${errMsg}` });
-              }
-            } else {
-              send({ type: "error", message: errMsg });
-            }
+          } else {
+            await fetchSimpleProvider(selectedProvider, selectedModel, apiKey, system, messages, send);
           }
-        } else {
-          await fetchSimpleProvider(selectedProvider, selectedModel, finalApiKey, system, messages, send);
+        } catch (error) {
+          const errMsg = (error as Error).message;
+          send({ type: "thinking", content: `⚠️ ${selectedProvider} falhou: ${errMsg.slice(0, 100)}` });
+
+          const recovered = await tryFallbackChain(selectedProvider, system, messages, send);
+          if (!recovered) {
+            send({ type: "error", message: `${selectedProvider} falhou e nenhum fallback disponível: ${errMsg.slice(0, 150)}` });
+          }
         }
       } catch (error) {
         send({ type: "error", message: (error as Error).message });

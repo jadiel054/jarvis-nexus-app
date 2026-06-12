@@ -2,16 +2,16 @@
 import { useChatStore, useUIStore } from "@/store";
 
 const PROVIDER_MODELS: Record<string, string[]> = {
-  anthropic: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001"],
   groq: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it", "mixtral-8x7b-32768"],
+  anthropic: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001"],
   openrouter: ["qwen/qwen3-235b-a22b:free", "deepseek/deepseek-r1:free", "google/gemini-2.0-flash-exp:free", "meta-llama/llama-3.3-70b-instruct:free"],
   openai: ["gpt-4o", "gpt-4o-mini"],
   gemini: ["gemini-2.0-flash-exp", "gemini-1.5-pro"],
 };
 
 const PROVIDER_LABELS: Record<string, string> = {
-  anthropic: "Anthropic",
   groq: "Groq",
+  anthropic: "Anthropic",
   openrouter: "OpenRouter",
   openai: "OpenAI",
   gemini: "Gemini",
