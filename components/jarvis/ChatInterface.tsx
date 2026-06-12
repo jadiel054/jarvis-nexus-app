@@ -509,7 +509,7 @@ export function ChatInterface() {
             }
             case "tool_result": {
               if (event.id) {
-                const failed = (event.content as Record<string,unknown>)?.error;
+                const failed = (event.content as unknown as Record<string,unknown>)?.error;
                 allToolCalls = allToolCalls.map(tc => tc.id === event.id ? { ...tc, status: failed ? "error" : "done", output: event.content } : tc);
                 // Advance plan step
                 if (currentPlan) {
