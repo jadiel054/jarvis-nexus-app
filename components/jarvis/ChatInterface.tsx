@@ -517,7 +517,7 @@ export function ChatInterface() {
                   if (runningIdx !== -1) {
                     const newStatus = failed ? "error" : "done";
                     updatePlanStep(runningIdx, newStatus);
-                    const updatedSteps = currentPlan.steps.map((s, i) => i === runningIdx ? { ...s, status: newStatus as const } : s);
+                    const updatedSteps = currentPlan.steps.map((s, i) => i === runningIdx ? { ...s, status: newStatus as "pending"|"running"|"done"|"error"|"skipped" } : s);
                     currentPlan = { ...currentPlan, steps: updatedSteps };
                   }
                 }
