@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Message, ToolCall, Plan, SSEEvent } from "@/types";
 import { useChatStore, useMemoryStore, useUIStore } from "@/store";
+import { useBreakpoint } from "@/hooks/useBreakpoint";
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -370,6 +371,9 @@ const ACTION_CARDS = [
 // ── MAIN COMPONENT ────────────────────────────────────────────
 export default function ChatInterface() {
   const { messages, agentStatus, streamingText, addMessage, updateMessage, setAgentStatus, setStreamingText, persistMessages } = useChatStore();
+  const bp = useBreakpoint();
+  const isMobile = bp === "mobile";
+  const isTablet = bp === "tablet";
   const { addMemory, addEvolutionEntry } = useMemoryStore();
   const { showToast, activePlan, setActivePlan, updatePlanStep, aiProvider, aiModel } = useUIStore();
 
@@ -576,7 +580,7 @@ export default function ChatInterface() {
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
       {/* Messages */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "20px", display: "flex", flexDirection: "column", gap: 16 }} onScroll={handleScroll}>
+      <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "10px" : "20px", display: "flex", flexDirection: "column", gap: isMobile ? 8 : 16 }} onScroll={handleScroll}>
 
         {messages.length === 0 && (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 24, padding: "40px 20px", animation: "fade-in .6s ease forwards" }}>
@@ -586,7 +590,7 @@ export default function ChatInterface() {
             <p style={{ fontSize: 14, color: "var(--text-secondary)", textAlign: "center", maxWidth: 400, lineHeight: 1.6 }}>
               Sistemas online. Aguardando instruções, Jadiel.
             </p>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, width: "100%", maxWidth: 600 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : isTablet ? "repeat(2, 1fr)" : "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, width: "100%", maxWidth: 600 }}>
               {ACTION_CARDS.map((card, i) => (
                 <div key={i} onClick={() => sendMessage(card.prompt)} style={{ background: "var(--bg-card)", border: "1px solid var(--border-glow)", borderRadius: 12, padding: 16, cursor: "pointer", transition: "all .25s ease" }}
                   onMouseOver={e => { (e.currentTarget as HTMLElement).style.borderColor = "rgba(0,245,255,0.4)"; (e.currentTarget as HTMLElement).style.boxShadow = "var(--glow-cyan)"; (e.currentTarget as HTMLElement).style.transform = "translateY(-2px)"; }}
@@ -608,7 +612,7 @@ export default function ChatInterface() {
                 {msg.role === "assistant" ? "⚡" : "J"}
               </div>
               {/* Bubble */}
-              <div style={{ maxWidth: "min(70%, 600px)", padding: "12px 16px", borderRadius: msg.role === "assistant" ? "4px 12px 12px 12px" : "12px 4px 12px 12px", border: "1px solid var(--border-glow)", background: msg.role === "user" ? "rgba(0,245,255,0.06)" : "var(--bg-card)", fontSize: 14, lineHeight: 1.6 }}>
+              <div style={{ maxWidth: isMobile ? "85%" : "min(70%, 600px)", padding: isMobile ? "8px 12px" : "12px 16px", borderRadius: msg.role === "assistant" ? "4px 12px 12px 12px" : "12px 4px 12px 12px", border: "1px solid var(--border-glow)", background: msg.role === "user" ? "rgba(0,245,255,0.06)" : "var(--bg-card)", fontSize: isMobile ? 13 : 14, lineHeight: 1.6 }}>
                 {msg.role === "assistant" ? (
                   <div className="jarvis-prose">
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -665,7 +669,7 @@ export default function ChatInterface() {
       )}
 
       {/* Quick hints */}
-      <div style={{ padding: "4px 20px 0", display: "flex", gap: 6, flexWrap: "wrap", background: "rgba(2,2,8,.95)" }}>
+      <div style={{ padding: isMobile ? "4px 8px 0" : "4px 20px 0", display: "flex", gap: 6, flexWrap: "wrap", background: "rgba(2,2,8,.95)" }}>
         {[
           { label: "⚙ settings", cmd: "abra settings" },
           { label: "🐙 repos", cmd: "liste meus repositórios" },
@@ -742,8 +746,8 @@ export default function ChatInterface() {
       />
 
       {/* Input area */}
-      <div style={{ background: "rgba(2,2,8,.95)", borderTop: "1px solid var(--border-glow)", padding: "12px 20px" }}>
-        <div style={{ display: "flex", gap: 8, alignItems: "flex-end", background: "var(--bg-card)", border: "1px solid var(--border-glow)", borderRadius: 12, padding: "8px 12px", transition: "border-color .2s" }}
+      <div style={{ background: "rgba(2,2,8,.95)", borderTop: "1px solid var(--border-glow)", padding: isMobile ? "8px 10px" : "12px 20px" }}>
+        <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 8, alignItems: isMobile ? "stretch" : "flex-end", background: "var(--bg-card)", border: "1px solid var(--border-glow)", borderRadius: 12, padding: "8px 12px", transition: "border-color .2s" }}
           onFocus={e => { e.currentTarget.style.borderColor = "rgba(0,245,255,.5)"; }}
           onBlur={e => { e.currentTarget.style.borderColor = "var(--border-glow)"; }}
           onDrop={async (e) => {
@@ -822,7 +826,7 @@ export default function ChatInterface() {
           </button>
         </div>
         <div style={{ marginTop: 6, fontSize: 10, color: "var(--text-muted)", fontFamily: "JetBrains Mono,monospace", textAlign: "center" }}>
-          📎 arrastar arquivo • 🔗 link • 🎤 voz • 🔊 TTS {JarvisTTS._enabled ? "(ativo)" : "(desativado)"}
+          {!isMobile && <>📎 arrastar arquivo • 🔗 link • 🎤 voz • 🔊 TTS {JarvisTTS._enabled ? "(ativo)" : "(desativado)"}</>}
         </div>
       </div>
     </div>
