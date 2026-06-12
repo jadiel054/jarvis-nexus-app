@@ -3,7 +3,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import type { Conversation, Message, Memory, EvolutionEntry, AgentStatus, Plan, Toast } from "@/types";
 
-// ── CHAT STORE ────────────────────────────────────────────────
+// ── CHAT STORE ──────────────────────────────────────────────────────────
 interface ChatState {
   conversations: Conversation[];
   activeConvId: string | null;
@@ -109,7 +109,7 @@ export const useChatStore = create<ChatState>()(
   )
 );
 
-// ── MEMORY STORE ─────────────────────────────────────────────
+// ── MEMORY STORE ─────────────────────────────────────────────────────────
 interface MemoryState {
   memories: Memory[];
   evolution: EvolutionEntry[];
@@ -135,7 +135,7 @@ export const useMemoryStore = create<MemoryState>()(
   )
 );
 
-// ── UI STORE ─────────────────────────────────────────────────
+// ── UI STORE ─────────────────────────────────────────────────────────────
 interface UIState {
   sidebarOpen: boolean;
   showSettings: boolean;
@@ -149,6 +149,7 @@ interface UIState {
   aiModel: string;
 
   setSidebarOpen: (v: boolean) => void;
+  toggleSidebar: () => void;
   setShowSettings: (v: boolean) => void;
   setShowMemories: (v: boolean) => void;
   setShowIntegrations: (v: boolean) => void;
@@ -174,6 +175,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
   aiModel: (() => { try { return localStorage.getItem("jarvis_ai_model") || "llama-3.3-70b-versatile"; } catch { return "llama-3.3-70b-versatile"; } })(),
 
   setSidebarOpen: (v) => set({ sidebarOpen: v }),
+  toggleSidebar: () => set(s => ({ sidebarOpen: !s.sidebarOpen })),
   setShowSettings: (v) => set({ showSettings: v }),
   setShowMemories: (v) => set({ showMemories: v }),
   setShowIntegrations: (v) => set({ showIntegrations: v }),
