@@ -62,14 +62,14 @@ export function PushPrompt() {
           body: JSON.stringify(sub.toJSON()),
         });
 
-        // Show a test notification
-        reg.showNotification("J.A.R.V.I.S. Nexus", {
+        // Show a test notification (NotificationOptions from lib.dom.d.ts)
+        const options: NotificationOptions = {
           body: "Notificacoes ativadas! Voce recebera alertas do Jarvis.",
           icon: "/icon-192.png",
           badge: "/icon-192.png",
-          vibrate: [200, 100, 200],
           tag: "jarvis-welcome",
-        });
+        };
+        reg.showNotification("J.A.R.V.I.S. Nexus", options);
       } else {
         setStatus("denied");
         setShow(false);
