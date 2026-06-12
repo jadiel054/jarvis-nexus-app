@@ -277,7 +277,7 @@ function ToolCard({ tc }: { tc: ToolCall }) {
   return (
     <div style={{ borderRadius: 10, border: "1px solid rgba(0,245,255,0.15)", background: "var(--bg-card)", overflow: "hidden", marginBottom: 2 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderBottom: "1px solid rgba(0,245,255,0.08)" }}>
-        <span style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 10, color: "var(--neon-cyan)", opacity: 0.6 }}>>_</span>
+        <span style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 10, color: "var(--neon-cyan)", opacity: 0.6 }}>{">>_"}</span>
         <span style={{ fontSize: 14 }}>{info.icon}</span>
         <span style={{ fontSize: 13, color: "var(--text-primary)", flex: 1 }}>{info.label}</span>
         {tc.status === "running" && <span className="ldrs-orbit" />}
