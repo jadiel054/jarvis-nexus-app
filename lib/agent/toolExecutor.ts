@@ -54,7 +54,7 @@ export async function toolExecutor(name: string, input: Record<string, any>): Pr
         if (!r.ok) return { error: `GitHub ${r.status}` };
         const data = await r.json();
         const files = (data.tree || []).filter((t: Record<string,string>) => t.type === "blob").map((t: Record<string,string>) => t.path);
-        const dirs = [...new Set((data.tree || []).filter((t: Record<string,string>) => t.type === "tree").map((t: Record<string,string>) => t.path))];
+        const dirs = Array.from(new Set((data.tree || []).filter((t: Record<string,string>) => t.type === "tree").map((t: Record<string,string>) => t.path)));
         return { total_files: files.length, directories: dirs.slice(0, 60), files: files.slice(0, 250), truncated: data.truncated, key_files: files.filter((f: string) => ["package.json","tsconfig.json","vite.config.ts","next.config.ts","next.config.js","README.md","Dockerfile",".env.example","vercel.json","requirements.txt","Cargo.toml"].includes(f.split("/").pop()!)) };
       }
 
