@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
       if (done) break;
       for (const line of decoder.decode(value).split("\n")) {
         if (!line.startsWith("data: ")) continue;
-        try { const ev = JSON.parse(line.slice(6)); if (ev.type === "response") finalText += ev.content; } catch {}
+        try { const ev = JSON.parse(line.slice(6)); if (ev.type === "response") finalText += ev.content || ""; } catch {}
       }
     }
     const chunks = (finalText || "Processado.").match(/[\s\S]{1,4000}/g) || [finalText];
