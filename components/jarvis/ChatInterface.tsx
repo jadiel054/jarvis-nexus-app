@@ -269,13 +269,6 @@ function ToolCard({ tc }: { tc: ToolCall }) {
       );
       return <KnowledgeCard results={(out.results as Record<string,string>[])} query={tc.input.query as string} />;
     }
-    // @ts-ignore
-    if (tc.status === "running") return (
-      <div style={{ padding: "8px 12px", background: "rgba(191,0,255,0.04)", border: "1px solid rgba(191,0,255,0.2)", borderRadius: 10, display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ width: 14, height: 14, borderRadius: "50%", border: "1.5px solid rgba(191,0,255,0.3)", borderTopColor: "var(--neon-purple)", animation: "ldrs-spin .8s linear infinite", display: "inline-block" }} />
-        <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>Recuperando conhecimento...</span>
-      </div>
-    );
   }
 
   const info = TOOL_LABELS[tc.name] || { label: tc.name, icon: "🔧" };
@@ -284,7 +277,7 @@ function ToolCard({ tc }: { tc: ToolCall }) {
   return (
     <div style={{ borderRadius: 10, border: "1px solid rgba(0,245,255,0.15)", background: "var(--bg-card)", overflow: "hidden", marginBottom: 2 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderBottom: "1px solid rgba(0,245,255,0.08)" }}>
-        <span style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 10, color: "var(--neon-cyan)", opacity: 0.6 }}>&gt;_</span>
+        <span style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 10, color: "var(--neon-cyan)", opacity: 0.6 }}>>_</span>
         <span style={{ fontSize: 14 }}>{info.icon}</span>
         <span style={{ fontSize: 13, color: "var(--text-primary)", flex: 1 }}>{info.label}</span>
         {tc.status === "running" && <span className="ldrs-orbit" />}
@@ -483,7 +476,7 @@ export function ChatInterface() {
             case "plan_update": {
               if (currentPlan && event.step_index !== undefined && event.status) {
                 updatePlanStep(event.step_index, event.status, event.note);
-                const updatedSteps = currentPlan.steps.map((s, i) => i === event.step_index ? { ...s, status: event.status as "pending"|"running"|"done"|"error"|"skipped", note: event.note } : s);
+                const updatedSteps = currentPlan.steps.map((s, i) => i === event.step_index ? { ...s, status: event.status as any, note: event.note } : s);
                 currentPlan = { ...currentPlan, steps: updatedSteps };
                 updateMessage(assistantId, { plan: currentPlan });
               }
@@ -492,7 +485,7 @@ export function ChatInterface() {
             case "tool_use": {
               if (event.id && event.name) {
                 // Check if there was narration before this tool
-                const tc: ToolCall = { id: event.id, name: event.name, input: event.input || {}, status: "running" };
+                const tc: ToolCall = { id: event.id, name: event.name, input: event.input || {}, status: "running" as const };
                 allToolCalls = [...allToolCalls, tc];
                 // Auto-advance plan step
                 if (currentPlan) {
@@ -509,7 +502,7 @@ export function ChatInterface() {
             }
             case "tool_result": {
               if (event.id) {
-                const failed = (event.content as unknown as Record<string,unknown>)?.error;
+                const failed = (event.content as any)?.error;
                 allToolCalls = allToolCalls.map(tc => tc.id === event.id ? { ...tc, status: failed ? "error" : "done", output: event.content } : tc);
                 // Advance plan step
                 if (currentPlan) {
@@ -517,7 +510,7 @@ export function ChatInterface() {
                   if (runningIdx !== -1) {
                     const newStatus = failed ? "error" : "done";
                     updatePlanStep(runningIdx, newStatus);
-                    const updatedSteps = currentPlan.steps.map((s, i) => i === runningIdx ? { ...s, status: newStatus as "pending"|"running"|"done"|"error"|"skipped" } : s);
+                    const updatedSteps = currentPlan.steps.map((s, i) => i === runningIdx ? { ...s, status: newStatus as any } : s);
                     currentPlan = { ...currentPlan, steps: updatedSteps };
                   }
                 }
