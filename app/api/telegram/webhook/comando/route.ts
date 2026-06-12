@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
         if (!line.startsWith("data: ")) continue;
         try {
           const event = JSON.parse(line.slice(6));
-          if (event.type === "response") finalText += event.content;
+          if (event.type === "response") finalText += event.content || "";
         } catch {}
       }
     }
