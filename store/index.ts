@@ -170,8 +170,8 @@ export const useUIStore = create<UIState>()((set, get) => ({
   ttsEnabled: false,
   convSearch: "",
   activePlan: null,
-  aiProvider: "anthropic",
-  aiModel: "claude-sonnet-4-6",
+  aiProvider: (() => { try { return localStorage.getItem("jarvis_ai_provider") || "anthropic"; } catch { return "anthropic"; } })(),
+  aiModel: (() => { try { return localStorage.getItem("jarvis_ai_model") || "claude-sonnet-4-6"; } catch { return "claude-sonnet-4-6"; } })(),
 
   setSidebarOpen: (v) => set({ sidebarOpen: v }),
   setShowSettings: (v) => set({ showSettings: v }),
@@ -197,6 +197,12 @@ export const useUIStore = create<UIState>()((set, get) => ({
     set({ activePlan: { ...plan, steps: plan.steps.map((s, i) => i === index ? { ...s, status: status as "pending"|"running"|"done"|"error"|"skipped", note } : s) } });
   },
 
-  setAiProvider: (p) => set({ aiProvider: p }),
-  setAiModel: (m) => set({ aiModel: m }),
+  setAiProvider: (p) => {
+    try { localStorage.setItem("jarvis_ai_provider", p); } catch {}
+    set({ aiProvider: p });
+  },
+  setAiModel: (m) => {
+    try { localStorage.setItem("jarvis_ai_model", m); } catch {}
+    set({ aiModel: m });
+  },
 }));

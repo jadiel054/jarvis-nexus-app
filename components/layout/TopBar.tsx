@@ -17,6 +17,22 @@ const PROVIDER_LABELS: Record<string, string> = {
   gemini: "Gemini",
 };
 
+const PROVIDER_ICONS: Record<string, string> = {
+  anthropic: "🤖",
+  groq: "⚡",
+  openrouter: "🔀",
+  openai: "🧠",
+  gemini: "🌟",
+};
+
+const PROVIDER_COLORS: Record<string, string> = {
+  anthropic: "var(--neon-cyan)",
+  groq: "#ff9d00",
+  openrouter: "#a855f7",
+  openai: "#10a37f",
+  gemini: "#4285f4",
+};
+
 const selectStyle: React.CSSProperties = {
   background: "var(--bg-card)",
   border: "1px solid var(--border-glow)",
@@ -45,6 +61,9 @@ export function TopBar() {
   } = useUIStore();
 
   const statusLabel = agentStatus === "idle" ? "ONLINE" : agentStatus === "thinking" ? "PROCESSANDO" : "RESPONDENDO";
+  const isActive = agentStatus !== "idle";
+  const providerColor = PROVIDER_COLORS[aiProvider] || "var(--neon-cyan)";
+  const providerIcon = PROVIDER_ICONS[aiProvider] || "🤖";
 
   const toggleTTS = () => {
     const next = !ttsEnabled;
@@ -83,6 +102,22 @@ export function TopBar() {
         <span style={{ fontFamily: "Orbitron,sans-serif", fontSize: 11, color: "var(--neon-cyan)", letterSpacing: "0.15em" }}>
           {statusLabel}
         </span>
+
+        {/* Active provider indicator — shows during streaming/thinking */}
+        {isActive && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 5,
+            background: `${providerColor}10`, border: `1px solid ${providerColor}40`,
+            borderRadius: 10, padding: "2px 8px",
+            animation: "fade-in .3s ease",
+          }}>
+            <span style={{ fontSize: 11 }}>{providerIcon}</span>
+            <span style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 9, color: providerColor }}>
+              {PROVIDER_LABELS[aiProvider]}
+            </span>
+            <div className="ldrs-ring" style={{ width: 10, height: 10, color: providerColor }} />
+          </div>
+        )}
       </div>
 
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -100,7 +135,7 @@ export function TopBar() {
         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
           <select value={aiProvider} onChange={handleProviderChange} style={selectStyle}>
             {Object.entries(PROVIDER_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{v}</option>
+              <option key={k} value={k}>{PROVIDER_ICONS[k]} {v}</option>
             ))}
           </select>
           <select value={aiModel} onChange={e => setAiModel(e.target.value)} style={selectStyle}>

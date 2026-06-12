@@ -174,7 +174,8 @@ async function runAnthropicLoop(
   messages: { role: string; content: string }[],
   send: (event: object) => void
 ): Promise<void> {
-  let currentMessages = [...messages];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let currentMessages: any[] = [...messages];
   let loopCount = 0;
   const MAX_LOOPS = 40;
 
