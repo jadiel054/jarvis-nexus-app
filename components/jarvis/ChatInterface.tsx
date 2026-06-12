@@ -829,7 +829,7 @@ export function ChatInterface() {
           </button>
         </div>
         <div style={{ marginTop: 6, fontSize: 10, color: "var(--text-muted)", fontFamily: "JetBrains Mono,monospace", textAlign: "center" }}>
-          📎 arrastar arquivo • 🔗 link • 🎤 voz • 🔊 TTS {ttsEnabled ? "(ativo)" : "(desativado)"}
+          📎 arrastar arquivo • 🔗 link • 🎤 voz • 🔊 TTS {JarvisTTS._enabled ? "(ativo)" : "(desativado)"}
         </div>
       </div>
     </div>
