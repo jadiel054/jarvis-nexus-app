@@ -1,5 +1,6 @@
 "use client";
 import { useChatStore, useUIStore } from "@/store";
+import { useBreakpoint } from "@/hooks/useBreakpoint";
 
 const PROVIDER_MODELS: Record<string, string[]> = {
   groq: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it", "mixtral-8x7b-32768"],
@@ -49,7 +50,7 @@ const selectStyle: React.CSSProperties = {
 export function TopBar() {
   const { agentStatus, tokenCount } = useChatStore();
   const {
-    setSidebarOpen,
+    toggleSidebar,
     setShowSettings,
     ttsEnabled,
     setTtsEnabled,
@@ -59,6 +60,10 @@ export function TopBar() {
     setAiProvider,
     setAiModel,
   } = useUIStore();
+  const bp = useBreakpoint();
+
+  const isMobile = bp === "mobile";
+  const isTablet = bp === "tablet";
 
   const statusLabel = agentStatus === "idle" ? "ONLINE" : agentStatus === "thinking" ? "PROCESSANDO" : "RESPONDENDO";
   const isActive = agentStatus !== "idle";
@@ -83,28 +88,34 @@ export function TopBar() {
   const models = PROVIDER_MODELS[aiProvider] || [];
 
   return (
-    <div style={{ background: "rgba(2,2,8,.9)", borderBottom: "1px solid var(--border-glow)", padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        {/* Mobile sidebar toggle */}
-        <button onClick={() => setSidebarOpen(true)}
-          style={{ background: "transparent", border: "1px solid var(--border-glow)", color: "var(--text-secondary)", cursor: "pointer", borderRadius: 6, padding: "4px 8px", fontSize: 16, display: "none" }}>
-          ☰
-        </button>
+    <div style={{ background: "rgba(2,2,8,.9)", borderBottom: "1px solid var(--border-glow)", padding: isMobile ? "10px 12px" : "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: isMobile ? 6 : 10 }}>
+        {/* Hamburger — visible on mobile and tablet */}
+        {(isMobile || isTablet) && (
+          <button onClick={toggleSidebar}
+            style={{ background: "transparent", border: "1px solid var(--border-glow)", color: "var(--text-secondary)", cursor: "pointer", borderRadius: 6, padding: "4px 8px", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            ☰
+          </button>
+        )}
 
         {/* Status indicator */}
         {agentStatus === "idle" ? (
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--neon-green)", boxShadow: "0 0 8px var(--neon-green)", animation: "glow-pulse 2s ease-in-out infinite" }} />
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "var(--neon-green)", boxShadow: "0 0 8px var(--neon-green)", animation: "glow-pulse 2s ease-in-out infinite", flexShrink: 0 }} />
         ) : agentStatus === "streaming" ? (
           <div className="ldrs-waveform"><span/><span/><span/><span/><span/></div>
         ) : (
           <div className="ldrs-dot-pulse"><span/><span/><span/></div>
         )}
-        <span style={{ fontFamily: "Orbitron,sans-serif", fontSize: 11, color: "var(--neon-cyan)", letterSpacing: "0.15em" }}>
-          {statusLabel}
-        </span>
 
-        {/* Active provider indicator — shows during streaming/thinking */}
-        {isActive && (
+        {/* Status label — hidden on mobile if streaming (save space) */}
+        {!(isMobile && isActive) && (
+          <span style={{ fontFamily: "Orbitron,sans-serif", fontSize: isMobile ? 10 : 11, color: "var(--neon-cyan)", letterSpacing: "0.15em", whiteSpace: "nowrap" }}>
+            {isMobile ? statusLabel.slice(0, 3) : statusLabel}
+          </span>
+        )}
+
+        {/* Active provider indicator */}
+        {isActive && !isMobile && (
           <div style={{
             display: "flex", alignItems: "center", gap: 5,
             background: `${providerColor}10`, border: `1px solid ${providerColor}40`,
@@ -120,29 +131,34 @@ export function TopBar() {
         )}
       </div>
 
-      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        {tokenCount > 0 && (
-          <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 9, color: "var(--text-muted)" }}>
+      <div style={{ display: "flex", gap: isMobile ? 4 : 8, alignItems: "center" }}>
+        {/* Token count — hidden on mobile */}
+        {tokenCount > 0 && !isMobile && (
+          <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 9, color: "var(--text-muted)", whiteSpace: "nowrap" }}>
             ~{tokenCount.toLocaleString()} tokens
           </div>
         )}
+
+        {/* TTS button */}
         <button onClick={toggleTTS}
-          style={{ background: ttsEnabled ? "rgba(191,0,255,.08)" : "transparent", border: `1px solid ${ttsEnabled ? "rgba(191,0,255,.5)" : "var(--border-glow)"}`, color: ttsEnabled ? "var(--neon-purple)" : "var(--text-secondary)", fontFamily: "JetBrains Mono,monospace", fontSize: 10, padding: "4px 10px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, transition: "all .2s" }}>
-          {ttsEnabled ? "🔊" : "🔇"} <span>VOZ</span>
+          style={{ background: ttsEnabled ? "rgba(191,0,255,.08)" : "transparent", border: `1px solid ${ttsEnabled ? "rgba(191,0,255,.5)" : "var(--border-glow)"}`, color: ttsEnabled ? "var(--neon-purple)" : "var(--text-secondary)", fontFamily: "JetBrains Mono,monospace", fontSize: 10, padding: isMobile ? "4px 6px" : "4px 10px", borderRadius: 6, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, transition: "all .2s" }}>
+          {ttsEnabled ? "🔊" : "🔇"} {!isMobile && <span>VOZ</span>}
         </button>
 
-        {/* Provider + Model selector */}
+        {/* Provider + Model selector — compact on tablet */}
         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-          <select value={aiProvider} onChange={handleProviderChange} style={selectStyle}>
+          <select value={aiProvider} onChange={handleProviderChange} style={{ ...selectStyle, maxWidth: isTablet ? 60 : 130, fontSize: isTablet ? 9 : 10 }}>
             {Object.entries(PROVIDER_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{PROVIDER_ICONS[k]} {v}</option>
+              <option key={k} value={k}>{PROVIDER_ICONS[k]} {isTablet ? "" : v}</option>
             ))}
           </select>
-          <select value={aiModel} onChange={e => setAiModel(e.target.value)} style={selectStyle}>
-            {models.map(m => (
-              <option key={m} value={m}>{m}</option>
-            ))}
-          </select>
+          {!isMobile && (
+            <select value={aiModel} onChange={e => setAiModel(e.target.value)} style={{ ...selectStyle, maxWidth: isTablet ? 90 : 130 }}>
+              {models.map(m => (
+                <option key={m} value={m}>{m.split("/").pop()}</option>
+              ))}
+            </select>
+          )}
         </div>
       </div>
     </div>
