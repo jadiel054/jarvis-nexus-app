@@ -576,13 +576,6 @@ export function ChatInterface() {
     inputRef.current?.focus();
   }, [input, isLoading, messages, addMessage, updateMessage, setAgentStatus, setStreamingText, setActivePlan, updatePlanStep, persistMessages, addEvolutionEntry, showToast]);
 
-  // Sync TTS engine with store state
-  useEffect(() => {
-    if (JarvisTTS._enabled !== ttsEnabled) {
-      JarvisTTS._enabled = ttsEnabled;
-      if (!ttsEnabled) JarvisTTS.stop();
-    }
-  }, [ttsEnabled]);
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   };
