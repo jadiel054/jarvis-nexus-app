@@ -371,7 +371,7 @@ const ACTION_CARDS = [
 export default function ChatInterface() {
   const { messages, agentStatus, streamingText, addMessage, updateMessage, setAgentStatus, setStreamingText, persistMessages } = useChatStore();
   const { addMemory, addEvolutionEntry } = useMemoryStore();
-  const { showToast, activePlan, setActivePlan, updatePlanStep } = useUIStore();
+  const { showToast, activePlan, setActivePlan, updatePlanStep, aiProvider, aiModel } = useUIStore();
 
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -436,7 +436,7 @@ export default function ChatInterface() {
       const res = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: apiMessages }),
+        body: JSON.stringify({ messages: apiMessages, provider: aiProvider, model: aiModel }),
       });
 
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
@@ -567,7 +567,7 @@ export default function ChatInterface() {
     setIsLoading(false);
     setAgentStatus("idle");
     inputRef.current?.focus();
-  }, [input, isLoading, messages, addMessage, updateMessage, setAgentStatus, setStreamingText, setActivePlan, updatePlanStep, persistMessages, addEvolutionEntry, showToast]);
+  }, [input, isLoading, messages, addMessage, updateMessage, setAgentStatus, setStreamingText, setActivePlan, updatePlanStep, persistMessages, addEvolutionEntry, showToast, aiProvider, aiModel]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }

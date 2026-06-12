@@ -4,10 +4,14 @@ import { useUIStore } from "@/store";
 
 const FIELDS = [
   { group: "🤖 ANTHROPIC",  fields: [{ key: "anthropicKey",  label: "ANTHROPIC_API_KEY",       hint: "sk-ant-..." }] },
+  { group: "⚡ GROQ",       fields: [{ key: "groqKey",       label: "GROQ_API_KEY",             hint: "gsk_..." }] },
+  { group: "🌟 GEMINI",     fields: [{ key: "geminiKey",     label: "GEMINI_API_KEY",           hint: "AIza..." }] },
+  { group: "🔀 OPENROUTER", fields: [{ key: "openrouterKey", label: "OPENROUTER_API_KEY",       hint: "sk-or-..." }] },
+  { group: "🤖 OPENAI",     fields: [{ key: "openaiKey",     label: "OPENAI_API_KEY",           hint: "sk-..." }] },
+  { group: "🔷 DEEPSEEK",   fields: [{ key: "deepseekKey",   label: "DEEPSEEK_API_KEY",         hint: "sk-..." }] },
   { group: "🐙 GITHUB",     fields: [{ key: "githubToken",   label: "GITHUB_TOKEN",             hint: "ghp_..." }] },
   { group: "▲ VERCEL",     fields: [{ key: "vercelToken",   label: "VERCEL_TOKEN",             hint: "..." }] },
   { group: "🔍 TAVILY",     fields: [{ key: "tavilyKey",     label: "TAVILY_API_KEY",           hint: "tvly-..." }] },
-  { group: "🤖 OPENAI",     fields: [{ key: "openaiKey",     label: "OPENAI_API_KEY",           hint: "sk-..." }] },
   { group: "📨 TELEGRAM",   fields: [
     { key: "tgComandoToken", label: "BOT_COMANDO_TOKEN", hint: "..." },
     { key: "tgAlertsToken",  label: "BOT_ALERTS_TOKEN",  hint: "..." },

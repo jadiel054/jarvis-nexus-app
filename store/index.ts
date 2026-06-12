@@ -145,6 +145,8 @@ interface UIState {
   ttsEnabled: boolean;
   convSearch: string;
   activePlan: Plan | null;
+  aiProvider: string;
+  aiModel: string;
 
   setSidebarOpen: (v: boolean) => void;
   setShowSettings: (v: boolean) => void;
@@ -155,6 +157,8 @@ interface UIState {
   setConvSearch: (v: string) => void;
   setActivePlan: (p: Plan | null) => void;
   updatePlanStep: (index: number, status: string, note?: string) => void;
+  setAiProvider: (p: string) => void;
+  setAiModel: (m: string) => void;
 }
 
 export const useUIStore = create<UIState>()((set, get) => ({
@@ -166,6 +170,8 @@ export const useUIStore = create<UIState>()((set, get) => ({
   ttsEnabled: false,
   convSearch: "",
   activePlan: null,
+  aiProvider: "anthropic",
+  aiModel: "claude-sonnet-4-6",
 
   setSidebarOpen: (v) => set({ sidebarOpen: v }),
   setShowSettings: (v) => set({ showSettings: v }),
@@ -190,4 +196,7 @@ export const useUIStore = create<UIState>()((set, get) => ({
     if (!plan) return;
     set({ activePlan: { ...plan, steps: plan.steps.map((s, i) => i === index ? { ...s, status: status as "pending"|"running"|"done"|"error"|"skipped", note } : s) } });
   },
+
+  setAiProvider: (p) => set({ aiProvider: p }),
+  setAiModel: (m) => set({ aiModel: m }),
 }));
