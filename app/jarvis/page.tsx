@@ -9,6 +9,7 @@ import { MemoriesPanel } from "@/components/jarvis/MemoriesPanel";
 import { ToastContainer } from "@/components/ui/Toast";
 import { UpdateBanner } from "@/components/pwa/UpdateBanner";
 import { InstallPrompt } from "@/components/pwa/InstallPrompt";
+import { PushPrompt } from "@/components/pwa/PushPrompt";
 import { useChatStore, useUIStore } from "@/store";
 
 export default function JarvisPage() {
@@ -43,6 +44,7 @@ export default function JarvisPage() {
       {showMemories && <MemoriesPanel />}
 
       <InstallPrompt />
+      <PushPrompt />
       <UpdateBanner />
     </div>
   );
