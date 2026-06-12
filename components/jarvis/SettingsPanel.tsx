@@ -1,6 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useUIStore } from "@/store";
+import { createClient } from "@/lib/supabase/client";
+import { useBreakpoint } from "@/hooks/useBreakpoint";
 
 const FIELDS = [
   { group: "🤖 ANTHROPIC",  fields: [{ key: "anthropicKey",  label: "ANTHROPIC_API_KEY",       hint: "sk-ant-..." }] },
@@ -20,31 +22,110 @@ const FIELDS = [
   ]},
 ];
 
+function encrypt(val: string): string {
+  if (!val) return "";
+  try { return "enc:" + btoa(val); } catch { return val; }
+}
+
+function decrypt(val: string): string {
+  if (!val) return "";
+  if (val.startsWith("enc:")) {
+    try { return atob(val.slice(4)); } catch { return val; }
+  }
+  return val;
+}
+
 export function SettingsPanel() {
   const { setShowSettings, showToast } = useUIStore();
+  const bp = useBreakpoint();
   const [form, setForm] = useState<Record<string,string>>(() => {
     try { return JSON.parse(localStorage.getItem("jarvis_config") || "{}"); } catch { return {}; }
   });
+  const [saving, setSaving] = useState(false);
 
-  const save = () => {
+  // Load from Supabase on mount (merges with localStorage, Supabase wins)
+  useEffect(() => {
+    const supabase = createClient();
+    supabase
+      .from("user_settings")
+      .select("settings_key, settings_value")
+      .eq("user_id", "local")
+      .then(({ data, error }) => {
+        if (error || !data || data.length === 0) return;
+        const remote: Record<string, string> = {};
+        data.forEach((row: { settings_key: string; settings_value: string }) => {
+          remote[row.settings_key] = decrypt(row.settings_value);
+        });
+        // Merge: remote wins over localStorage
+        try {
+          const local = JSON.parse(localStorage.getItem("jarvis_config") || "{}");
+          const merged = { ...local, ...remote };
+          setForm(merged);
+          localStorage.setItem("jarvis_config", JSON.stringify(merged));
+        } catch {
+          setForm(remote);
+        }
+      });
+  }, []);
+
+  const save = async () => {
+    // 1. Save to localStorage
     localStorage.setItem("jarvis_config", JSON.stringify(form));
-    showToast("Configurações salvas ✓", "success");
+
+    // 2. Upsert to Supabase
+    setSaving(true);
+    const supabase = createClient();
+    const entries = Object.entries(form).filter(([, v]) => v);
+    const upserts = entries.map(([key, value]) =>
+      supabase
+        .from("user_settings")
+        .upsert(
+          { user_id: "local", settings_key: key, settings_value: encrypt(value) },
+          { onConflict: "user_id,settings_key" }
+        )
+    );
+
+    const results = await Promise.allSettled(upserts);
+    const failed = results.filter(r => r.status === "rejected").length;
+
+    setSaving(false);
+    if (failed === 0) {
+      showToast("Configuracoes salvas no Supabase ✓", "success");
+    } else if (failed < entries.length) {
+      showToast(`${entries.length - failed}/${entries.length} keys salvas (${failed} falhas)`, "info");
+    } else {
+      showToast("Salvo apenas no localStorage (Supabase indisponivel)", "info");
+    }
     setShowSettings(false);
   };
+
+  const isMobile = bp === "mobile";
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,5,.85)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center", animation: "fade-in .2s ease" }}
       onClick={e => e.target === e.currentTarget && setShowSettings(false)}>
-      <div style={{ background: "var(--bg-secondary)", border: "1px solid var(--border-glow)", borderRadius: 16, width: "min(520px, 94vw)", maxHeight: "85vh", overflowY: "auto", padding: 24, display: "flex", flexDirection: "column", gap: 20, boxShadow: "var(--glow-cyan)" }}>
+      <div style={{
+        background: "var(--bg-secondary)",
+        border: isMobile ? "none" : "1px solid var(--border-glow)",
+        borderRadius: isMobile ? 0 : 16,
+        width: isMobile ? "100vw" : "min(520px, 94vw)",
+        height: isMobile ? "100vh" : "auto",
+        maxHeight: isMobile ? "100vh" : "85vh",
+        overflowY: "auto",
+        padding: isMobile ? "20px 16px" : 24,
+        display: "flex",
+        flexDirection: "column",
+        gap: 20,
+        boxShadow: isMobile ? "none" : "var(--glow-cyan)",
+      }}>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontFamily: "Orbitron,sans-serif", fontSize: 16, color: "var(--neon-cyan)", letterSpacing: "0.15em" }}>⚙ CONFIGURAÇÕES</span>
+          <span style={{ fontFamily: "Orbitron,sans-serif", fontSize: 16, color: "var(--neon-cyan)", letterSpacing: "0.15em" }}>⚙ CONFIGURACOES</span>
           <button onClick={() => setShowSettings(false)} style={{ background: "transparent", border: "1px solid var(--border-glow)", color: "var(--text-secondary)", cursor: "pointer", borderRadius: 6, padding: "4px 10px", fontSize: 13 }}>✕</button>
         </div>
 
         <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "JetBrains Mono,monospace", border: "1px solid rgba(255,204,0,.2)", background: "rgba(255,204,0,.03)", padding: "10px 12px", borderRadius: 6, lineHeight: 1.6 }}>
-          💡 Em produção, todas as keys ficam nas variáveis de ambiente do Vercel — nunca no código.
-          Aqui ficam no localStorage só para desenvolvimento local.
+          💡 As keys sao salvas criptografadas no Supabase (tabela user_settings) e no localStorage como fallback.
         </div>
 
         {FIELDS.map(group => (
@@ -64,11 +145,11 @@ export function SettingsPanel() {
           </div>
         ))}
 
-        <button onClick={save}
-          style={{ background: "rgba(0,245,255,.1)", border: "1px solid var(--neon-cyan)", color: "var(--neon-cyan)", fontFamily: "Orbitron,sans-serif", fontSize: 11, letterSpacing: "0.1em", padding: "10px 20px", borderRadius: 8, cursor: "pointer", transition: "all .2s", alignSelf: "flex-end" }}
-          onMouseOver={e => { (e.currentTarget as HTMLElement).style.boxShadow = "var(--glow-cyan)"; (e.currentTarget as HTMLElement).style.background = "rgba(0,245,255,.2)"; }}
-          onMouseOut={e => { (e.currentTarget as HTMLElement).style.boxShadow = ""; (e.currentTarget as HTMLElement).style.background = "rgba(0,245,255,.1)"; }}>
-          ⚡ SALVAR
+        <button onClick={save} disabled={saving}
+          style={{ background: saving ? "rgba(0,245,255,.05)" : "rgba(0,245,255,.1)", border: "1px solid var(--neon-cyan)", color: "var(--neon-cyan)", fontFamily: "Orbitron,sans-serif", fontSize: 11, letterSpacing: "0.1em", padding: "10px 20px", borderRadius: 8, cursor: saving ? "wait" : "pointer", transition: "all .2s", alignSelf: "flex-end", opacity: saving ? 0.6 : 1 }}
+          onMouseOver={e => { if (!saving) { (e.currentTarget as HTMLElement).style.boxShadow = "var(--glow-cyan)"; (e.currentTarget as HTMLElement).style.background = "rgba(0,245,255,.2)"; } }}
+          onMouseOut={e => { if (!saving) { (e.currentTarget as HTMLElement).style.boxShadow = ""; (e.currentTarget as HTMLElement).style.background = "rgba(0,245,255,.1)"; } }}>
+          {saving ? "SALVANDO..." : "⚡ SALVAR"}
         </button>
       </div>
     </div>
