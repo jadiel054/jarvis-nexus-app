@@ -22,6 +22,26 @@ const FIELDS = [
   ]},
 ];
 
+const KEY_MAP: Record<string, string> = {
+  groqKey: "GROQ_API_KEY",
+  anthropicKey: "ANTHROPIC_API_KEY",
+  geminiKey: "GEMINI_API_KEY",
+  openrouterKey: "OPENROUTER_API_KEY",
+  openaiKey: "OPENAI_API_KEY",
+  deepseekKey: "DEEPSEEK_API_KEY",
+  githubToken: "GITHUB_TOKEN",
+  vercelToken: "VERCEL_TOKEN",
+  tavilyKey: "TAVILY_API_KEY",
+  tgComandoToken: "BOT_COMANDO_TOKEN",
+  tgAlertsToken: "BOT_ALERTS_TOKEN",
+  tgDevToken: "BOT_DEV_TOKEN",
+  tgAdminId: "ADMIN_CHAT_ID",
+};
+
+const REVERSE_KEY_MAP = Object.fromEntries(
+  Object.entries(KEY_MAP).map(([formKey, settingsKey]) => [settingsKey, formKey])
+) as Record<string, string>;
+
 function encrypt(val: string): string {
   if (!val) return "";
   try { return "enc:" + btoa(val); } catch { return val; }
@@ -53,7 +73,8 @@ export function SettingsPanel() {
         if (error || !data || data.length === 0) return;
         const remote: Record<string, string> = {};
         data.forEach((row: { key: string; value: string }) => {
-          remote[row.key] = decrypt(row.value);
+          const formKey = REVERSE_KEY_MAP[row.key] || row.key;
+          remote[formKey] = decrypt(row.value);
         });
         // Merge: remote wins over localStorage
         try {
@@ -74,21 +95,6 @@ export function SettingsPanel() {
     // 2. Upsert to Supabase — map form keys to API key names the backend expects
     setSaving(true);
     const supabase = createClient();
-    const KEY_MAP: Record<string, string> = {
-      anthropicKey: "ANTHROPIC_API_KEY",
-      groqKey: "GROQ_API_KEY",
-      geminiKey: "GEMINI_API_KEY",
-      openrouterKey: "OPENROUTER_API_KEY",
-      openaiKey: "OPENAI_API_KEY",
-      deepseekKey: "DEEPSEEK_API_KEY",
-      githubToken: "GITHUB_TOKEN",
-      vercelToken: "VERCEL_TOKEN",
-      tavilyKey: "TAVILY_API_KEY",
-      tgComandoToken: "BOT_COMANDO_TOKEN",
-      tgAlertsToken: "BOT_ALERTS_TOKEN",
-      tgDevToken: "BOT_DEV_TOKEN",
-      tgAdminId: "ADMIN_CHAT_ID",
-    };
     const entries = Object.entries(form).filter(([, v]) => v);
     const upserts = entries.map(([key, value]) => {
       const settingsKey = KEY_MAP[key] || key;
@@ -101,7 +107,10 @@ export function SettingsPanel() {
     });
 
     const results = await Promise.allSettled(upserts);
-    const failed = results.filter(r => r.status === "rejected").length;
+    const failed = results.filter((result) => {
+      if (result.status === "rejected") return true;
+      return Boolean(result.value.error);
+    }).length;
 
     setSaving(false);
     if (failed === 0) {
