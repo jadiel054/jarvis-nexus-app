@@ -1,2 +1,5 @@
 import { redirect } from "next/navigation";
-export default function Home() { redirect("/jarvis"); }
+
+export default function RootPage() {
+  redirect("/jarvis");
+}

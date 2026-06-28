@@ -203,6 +203,84 @@ export async function toolExecutor(name: string, input: Record<string, any>): Pr
         return { total: runs.length, passed: runs.filter((r: Record<string,string>) => r.conclusion === "success").length, failed: runs.filter((r: Record<string,string>) => r.conclusion === "failure").length, pending: runs.filter((r: Record<string,string>) => r.status === "in_progress").length, all_passed: runs.length > 0 && runs.every((r: Record<string,string>) => r.conclusion === "success"), checks: runs.map((r: Record<string,string>) => ({ name: r.name, status: r.status, conclusion: r.conclusion, url: r.html_url })) };
       }
 
+      case "github_create_commit": {
+        const { owner, repo, branch = "main", message, files } = input;
+        if (!Array.isArray(files) || files.length === 0)
+          return { error: "Campo 'files' obrigatório: [{ path, content }]" };
+
+        // 1. HEAD da branch atual
+        const refR = await gh(`/repos/${owner}/${repo}/git/refs/heads/${branch}`);
+        if (!refR.ok) return { error: `Branch '${branch}' não encontrada` };
+        const refData = await refR.json();
+        const headSha = refData.object?.sha;
+        if (!headSha) return { error: "Não foi possível obter SHA do HEAD" };
+
+        // 2. Tree SHA do commit atual
+        const commitR = await gh(`/repos/${owner}/${repo}/git/commits/${headSha}`);
+        if (!commitR.ok) return { error: "Não foi possível obter commit base" };
+        const baseTreeSha = (await commitR.json()).tree?.sha;
+        if (!baseTreeSha) return { error: "Tree SHA não encontrado" };
+
+        // 3. Criar blobs para cada arquivo
+        const treeItems: { path: string; mode: string; type: string; sha: string }[] = [];
+        for (const file of files as { path: string; content: string }[]) {
+          const blobR = await gh(`/repos/${owner}/${repo}/git/blobs`, {
+            method: "POST",
+            body: JSON.stringify({
+              content: Buffer.from(file.content).toString("base64"),
+              encoding: "base64",
+            }),
+          });
+          if (!blobR.ok) {
+            const e = await blobR.json();
+            return { error: `Falha ao criar blob para ${file.path}: ${e.message}` };
+          }
+          const blobData = await blobR.json();
+          treeItems.push({ path: file.path, mode: "100644", type: "blob", sha: blobData.sha });
+        }
+
+        // 4. Nova tree
+        const treeR = await gh(`/repos/${owner}/${repo}/git/trees`, {
+          method: "POST",
+          body: JSON.stringify({ base_tree: baseTreeSha, tree: treeItems }),
+        });
+        if (!treeR.ok) {
+          const e = await treeR.json();
+          return { error: `Falha ao criar tree: ${e.message}` };
+        }
+        const newTreeSha = (await treeR.json()).sha;
+
+        // 5. Novo commit
+        const newCommitR = await gh(`/repos/${owner}/${repo}/git/commits`, {
+          method: "POST",
+          body: JSON.stringify({ message, tree: newTreeSha, parents: [headSha] }),
+        });
+        if (!newCommitR.ok) {
+          const e = await newCommitR.json();
+          return { error: `Falha ao criar commit: ${e.message}` };
+        }
+        const newCommitSha = (await newCommitR.json()).sha;
+
+        // 6. Atualizar branch
+        const updateR = await gh(`/repos/${owner}/${repo}/git/refs/heads/${branch}`, {
+          method: "PATCH",
+          body: JSON.stringify({ sha: newCommitSha, force: false }),
+        });
+        if (!updateR.ok) {
+          const e = await updateR.json();
+          return { error: `Commit criado (${newCommitSha.slice(0,7)}) mas falha ao atualizar branch: ${e.message}` };
+        }
+
+        return {
+          success: true,
+          commit_sha: newCommitSha.slice(0, 7),
+          commit_url: `https://github.com/${owner}/${repo}/commit/${newCommitSha}`,
+          files_changed: files.length,
+          branch,
+          message,
+        };
+      }
+
       case "github_create_workflow": {
         const { owner, repo, node_version = "20", package_manager = "npm", build_command = "npm run build" } = input;
         const install = package_manager === "pnpm" ? "pnpm install" : package_manager === "yarn" ? "yarn install" : "npm ci";
@@ -285,9 +363,95 @@ export async function toolExecutor(name: string, input: Record<string, any>): Pr
 
       // ── ZARITH ───────────────────────────────────────────────
       case "zarith_delegate": {
-        const r = await fetch(`${BASE}/api/supabase/zarith`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ task: input.task, context: input.context, repo: input.repo, priority: input.priority || "normal" }) });
-        if (!r.ok) return { error: "Falha ao delegar para Zarith" };
-        return await r.json();
+        const { task, context, repo, priority = "normal" } = input;
+        const taskId = `task_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+        const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+        const sbHeaders = {
+          "Content-Type": "application/json",
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+          Prefer: "return=representation",
+        };
+
+        const postR = await fetch(`${SUPABASE_URL}/rest/v1/agent_messages`, {
+          method: "POST",
+          headers: sbHeaders,
+          body: JSON.stringify({
+            from_agent: "jarvis",
+            to_agent: "zarith",
+            type: "task",
+            content: task,
+            metadata: { context, repo, priority, task_id: taskId, protocol_version: "1.0" },
+            created_at: new Date().toISOString(),
+          }),
+        });
+
+        if (!postR.ok) {
+          const err = await postR.text();
+          if (err.includes("does not exist"))
+            return { task_id: taskId, queued: true, note: "Supabase não configurado — tarefa em modo offline." };
+          return { error: `Falha ao delegar: ${err.slice(0, 150)}` };
+        }
+
+        const posted = await postR.json();
+        const messageId = posted[0]?.id;
+
+        // Polling de 30s aguardando resultado
+        const deadline = Date.now() + 30_000;
+        while (Date.now() < deadline) {
+          await new Promise((r) => setTimeout(r, 3000));
+          const checkR = await fetch(
+            `${SUPABASE_URL}/rest/v1/agent_messages?from_agent=eq.zarith&to_agent=eq.jarvis&type=eq.result&metadata->>task_id=eq.${taskId}&limit=1`,
+            { headers: sbHeaders }
+          );
+          if (checkR.ok) {
+            const rows = await checkR.json();
+            if (rows?.length > 0) {
+              await fetch(`${SUPABASE_URL}/rest/v1/agent_messages?id=eq.${rows[0].id}`, {
+                method: "PATCH",
+                headers: sbHeaders,
+                body: JSON.stringify({ processed_at: new Date().toISOString() }),
+              });
+              return { task_id: taskId, status: "done", result: rows[0].content, metadata: rows[0].metadata };
+            }
+          }
+        }
+
+        return {
+          task_id: taskId,
+          message_id: messageId,
+          status: "running",
+          note: "Tarefa delegada. Zarith está processando em background. Use zarith_check_result para verificar quando terminar.",
+        };
+      }
+
+      case "zarith_check_result": {
+        const { task_id } = input;
+        const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+        const sbHeaders = {
+          "Content-Type": "application/json",
+          apikey: SERVICE_KEY,
+          Authorization: `Bearer ${SERVICE_KEY}`,
+        };
+
+        const r = await fetch(
+          `${SUPABASE_URL}/rest/v1/agent_messages?from_agent=eq.zarith&to_agent=eq.jarvis&type=in.(result,error)&metadata->>task_id=eq.${task_id}&limit=1`,
+          { headers: sbHeaders }
+        );
+        if (!r.ok) return { error: "Falha ao verificar resultado" };
+        const rows = await r.json();
+        if (!rows?.length) return { task_id, status: "running", note: "Zarith ainda está processando." };
+
+        await fetch(`${SUPABASE_URL}/rest/v1/agent_messages?id=eq.${rows[0].id}`, {
+          method: "PATCH",
+          headers: { ...sbHeaders, Prefer: "return=minimal" },
+          body: JSON.stringify({ processed_at: new Date().toISOString() }),
+        });
+
+        return { task_id, status: rows[0].type, result: rows[0].content, metadata: rows[0].metadata };
       }
 
       // ── PLANNER (handled by UI) ───────────────────────────────

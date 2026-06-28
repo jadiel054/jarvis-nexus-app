@@ -1,6 +1,8 @@
 "use client";
 import { useChatStore, useUIStore } from "@/store";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
+import { createClient } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 const PROVIDER_MODELS: Record<string, string[]> = {
   groq: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it", "mixtral-8x7b-32768"],
@@ -61,6 +63,7 @@ export function TopBar() {
     setAiModel,
   } = useUIStore();
   const bp = useBreakpoint();
+  const router = useRouter();
 
   const isMobile = bp === "mobile";
   const isTablet = bp === "tablet";
@@ -86,6 +89,12 @@ export function TopBar() {
   };
 
   const models = PROVIDER_MODELS[aiProvider] || [];
+
+  const handleLogout = async () => {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
   return (
     <div style={{ background: "rgba(2,2,8,.9)", borderBottom: "1px solid var(--border-glow)", padding: isMobile ? "10px 12px" : "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 8 }}>
@@ -160,6 +169,30 @@ export function TopBar() {
             </select>
           )}
         </div>
+        <button
+          onClick={handleLogout}
+          title="Sair"
+          style={{
+            background: "none",
+            border: "1px solid #2a2a3a",
+            borderRadius: "6px",
+            color: "#666",
+            fontSize: "0.75rem",
+            padding: "4px 8px",
+            cursor: "pointer",
+            transition: "color 0.2s, border-color 0.2s",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLElement).style.color = "#ff0a6c";
+            (e.currentTarget as HTMLElement).style.borderColor = "#ff0a6c";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLElement).style.color = "#666";
+            (e.currentTarget as HTMLElement).style.borderColor = "#2a2a3a";
+          }}
+        >
+          Sair
+        </button>
       </div>
     </div>
   );

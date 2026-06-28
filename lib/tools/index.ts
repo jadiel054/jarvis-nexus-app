@@ -404,5 +404,42 @@ export const allTools = [
       },
       required: ["step_index","status"]
     }
+  },
+  {
+    name: "github_create_commit",
+    description: "Cria um commit com múltiplos arquivos de uma vez (atômico). PREFERIR sobre github_write_file para mudanças em 2+ arquivos. Não precisa de SHA individual por arquivo.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        owner: { type: "string" },
+        repo: { type: "string" },
+        branch: { type: "string", description: "Default: main" },
+        message: { type: "string", description: "Conventional commit: feat:, fix:, refactor:, docs:, chore:" },
+        files: {
+          type: "array",
+          description: "Lista de arquivos a commitar",
+          items: {
+            type: "object",
+            properties: {
+              path: { type: "string", description: "Caminho completo: src/components/Chat.tsx" },
+              content: { type: "string", description: "Conteúdo COMPLETO do arquivo" },
+            },
+            required: ["path", "content"],
+          },
+        },
+      },
+      required: ["owner", "repo", "message", "files"],
+    },
+  },
+  {
+    name: "zarith_check_result",
+    description: "Verifica se Zarith concluiu uma tarefa delegada anteriormente. Use quando zarith_delegate retornar status 'running'.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        task_id: { type: "string", description: "task_id retornado por zarith_delegate" },
+      },
+      required: ["task_id"],
+    },
   }
 ];

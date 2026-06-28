@@ -139,3 +139,52 @@ BEGIN
   LIMIT match_count;
 END;
 $$;
+
+-- ═══════════════════════════════════════════════════════════════
+-- MIGRATION v2 — Ecossistema Multi-Agente
+-- ═══════════════════════════════════════════════════════════════
+
+-- Expandir agent_messages para todos os agentes do ecossistema
+ALTER TABLE agent_messages
+  DROP CONSTRAINT IF EXISTS agent_messages_from_agent_check,
+  DROP CONSTRAINT IF EXISTS agent_messages_to_agent_check;
+
+ALTER TABLE agent_messages
+  ADD CONSTRAINT agent_messages_from_agent_check
+    CHECK (from_agent IN ('jarvis','zarith','morpheus','hermes','financeiro','aegis','system')),
+  ADD CONSTRAINT agent_messages_to_agent_check
+    CHECK (to_agent IN ('jarvis','zarith','morpheus','hermes','financeiro','aegis','system'));
+
+-- Registry de agentes
+CREATE TABLE IF NOT EXISTS agent_registry (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_name    TEXT UNIQUE NOT NULL,
+  agent_version TEXT NOT NULL DEFAULT '1.0.0',
+  protocol      TEXT NOT NULL DEFAULT '1.0',
+  status        TEXT CHECK (status IN ('online','offline','degraded')) DEFAULT 'offline',
+  capabilities  JSONB DEFAULT '[]',
+  endpoint_url  TEXT,
+  last_seen     TIMESTAMPTZ,
+  registered_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Health logs
+CREATE TABLE IF NOT EXISTS agent_health_logs (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  agent_name   TEXT NOT NULL,
+  status       TEXT CHECK (status IN ('healthy','degraded','offline')),
+  memory_usage INTEGER,
+  queue_size   INTEGER,
+  current_task TEXT,
+  last_error   TEXT,
+  uptime_ms    BIGINT,
+  logged_at    TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Índices
+CREATE INDEX IF NOT EXISTS idx_agent_messages_task_id
+  ON agent_messages ((metadata->>'task_id'));
+CREATE INDEX IF NOT EXISTS idx_agent_messages_to_unprocessed
+  ON agent_messages (to_agent, processed_at) WHERE processed_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_agent_registry_name
+  ON agent_registry (agent_name);
