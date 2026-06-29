@@ -4,7 +4,6 @@ import { NextRequest } from "next/server";
 import { allTools } from "@/lib/tools";
 import { toolExecutor } from "@/lib/agent/toolExecutor";
 import { getSystemPrompt } from "@/lib/agent/systemPrompt";
-import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -63,8 +62,12 @@ async function getConfigFromSettings(): Promise<Record<string, string>> {
   const config: Record<string, string> = {};
 
   try {
-    const supabase = createClient();
-    const { data, error } = await supabase.from("settings").select("key, value");
+    const { createClient } = await import("@supabase/supabase-js");
+    const admin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const { data, error } = await admin.from("settings").select("key, value");
 
     if (!error && Array.isArray(data)) {
       for (const row of data) {

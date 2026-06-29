@@ -95,14 +95,23 @@ export function SettingsPanel() {
     // 2. Upsert to Supabase — map form keys to API key names the backend expects
     setSaving(true);
     const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      showToast("Salvo apenas no localStorage (sem sessão)", "info");
+      setSaving(false);
+      setShowSettings(false);
+      return;
+    }
+
     const entries = Object.entries(form).filter(([, v]) => v);
     const upserts = entries.map(([key, value]) => {
       const settingsKey = KEY_MAP[key] || key;
       return supabase
         .from("settings")
         .upsert(
-          { key: settingsKey, value: encrypt(value) },
-          { onConflict: "key" }
+          { user_id: user.id, key: settingsKey, value: encrypt(value) },
+          { onConflict: "user_id,key" }
         );
     });
 
@@ -116,7 +125,7 @@ export function SettingsPanel() {
     if (failed === 0) {
       showToast("Configuracoes salvas no Supabase ✓", "success");
     } else if (failed < entries.length) {
-      showToast(`${entries.length - failed}/${entries.length} keys salvas (${failed} falhas)`, "info");
+      showToast(`${entries.length - failed}/${entries.length} keys salvas`, "info");
     } else {
       showToast("Salvo apenas no localStorage (Supabase indisponivel)", "info");
     }
