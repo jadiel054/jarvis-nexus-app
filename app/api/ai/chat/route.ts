@@ -4,48 +4,12 @@ import { NextRequest } from "next/server";
 import { allTools } from "@/lib/tools";
 import { toolExecutor } from "@/lib/agent/toolExecutor";
 import { getSystemPrompt } from "@/lib/agent/systemPrompt";
+import { AI_PROVIDERS, FALLBACK_ORDER, type ProviderId } from "@/lib/ai/providers";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 type ChatMessage = { role: "user" | "assistant"; content: string };
-
-const PROVIDERS = {
-  groq: {
-    keyName: "GROQ_API_KEY",
-    models: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it", "mixtral-8x7b-32768"],
-    defaultModel: "llama-3.3-70b-versatile",
-  },
-  openrouter: {
-    keyName: "OPENROUTER_API_KEY",
-    models: ["qwen/qwen3-235b-a22b:free", "deepseek/deepseek-r1:free", "google/gemini-2.0-flash-exp:free", "meta-llama/llama-3.3-70b-instruct:free"],
-    defaultModel: "google/gemini-2.0-flash-exp:free",
-  },
-  gemini: {
-    keyName: "GEMINI_API_KEY",
-    models: ["gemini-2.0-flash-exp", "gemini-1.5-pro"],
-    defaultModel: "gemini-2.0-flash-exp",
-  },
-  anthropic: {
-    keyName: "ANTHROPIC_API_KEY",
-    models: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001"],
-    defaultModel: "claude-sonnet-4-6",
-  },
-  openai: {
-    keyName: "OPENAI_API_KEY",
-    models: ["gpt-4o", "gpt-4o-mini"],
-    defaultModel: "gpt-4o-mini",
-  },
-  deepseek: {
-    keyName: "DEEPSEEK_API_KEY",
-    models: ["deepseek-chat"],
-    defaultModel: "deepseek-chat",
-  },
-} as const;
-
-type ProviderId = keyof typeof PROVIDERS;
-
-const FALLBACK_ORDER: ProviderId[] = ["groq", "openrouter", "gemini", "anthropic"];
 
 function decryptSettingValue(value: string | null | undefined): string {
   if (!value) return "";
@@ -80,10 +44,10 @@ async function getConfigFromSettings(): Promise<Record<string, string>> {
     console.warn("Falha ao ler settings do Supabase:", (error as Error).message);
   }
 
-  for (const provider of Object.values(PROVIDERS)) {
-    const envValue = process.env[provider.keyName];
-    if (!config[provider.keyName] && envValue) {
-      config[provider.keyName] = envValue;
+  for (const provider of Object.values(AI_PROVIDERS)) {
+    const envValue = process.env[provider.envKey];
+    if (!config[provider.envKey] && envValue) {
+      config[provider.envKey] = envValue;
     }
   }
 
@@ -91,28 +55,28 @@ async function getConfigFromSettings(): Promise<Record<string, string>> {
 }
 
 function resolveProvider(provider: unknown): ProviderId {
-  if (typeof provider === "string" && provider in PROVIDERS) {
+  if (typeof provider === "string" && provider in AI_PROVIDERS) {
     return provider as ProviderId;
   }
   return "groq";
 }
 
 function resolveModel(provider: ProviderId, requestedModel: unknown): string {
-  if (typeof requestedModel === "string" && PROVIDERS[provider].models.includes(requestedModel as never)) {
+  if (typeof requestedModel === "string" && AI_PROVIDERS[provider].models.includes(requestedModel as never)) {
     return requestedModel;
   }
-  return PROVIDERS[provider].defaultModel;
+  return AI_PROVIDERS[provider].defaultModel;
 }
 
 async function fetchOpenAICompatible(
-  url: string,
+  baseUrl: string,
   apiKey: string,
   model: string,
   systemPrompt: string,
   messages: ChatMessage[],
   extraHeaders?: Record<string, string>
 ): Promise<string> {
-  const response = await fetch(url, {
+  const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -128,7 +92,7 @@ async function fetchOpenAICompatible(
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`${url} ${response.status}: ${errorText.slice(0, 200)}`);
+    throw new Error(`${baseUrl} ${response.status}: ${errorText.slice(0, 200)}`);
   }
 
   const data = await response.json();
@@ -145,15 +109,9 @@ async function fetchSimpleProvider(
 ): Promise<void> {
   let text = "";
 
-  if (provider === "groq") {
-    text = await fetchOpenAICompatible("https://api.groq.com/openai/v1/chat/completions", apiKey, model, systemPrompt, messages);
-  } else if (provider === "openai") {
-    text = await fetchOpenAICompatible("https://api.openai.com/v1/chat/completions", apiKey, model, systemPrompt, messages);
-  } else if (provider === "deepseek") {
-    text = await fetchOpenAICompatible("https://api.deepseek.com/v1/chat/completions", apiKey, model, systemPrompt, messages);
-  } else if (provider === "openrouter") {
+  if (provider === "openrouter") {
     text = await fetchOpenAICompatible(
-      "https://openrouter.ai/api/v1/chat/completions",
+      AI_PROVIDERS.openrouter.baseUrl,
       apiKey,
       model,
       systemPrompt,
@@ -187,6 +145,14 @@ async function fetchSimpleProvider(
 
     const data = await response.json();
     text = data.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text || "").join("") || "";
+  } else if (provider === "groq") {
+    text = await fetchOpenAICompatible(AI_PROVIDERS.groq.baseUrl, apiKey, model, systemPrompt, messages);
+  } else if (provider === "cerebras") {
+    text = await fetchOpenAICompatible(AI_PROVIDERS.cerebras.baseUrl, apiKey, model, systemPrompt, messages);
+  } else if (provider === "openai") {
+    text = await fetchOpenAICompatible(AI_PROVIDERS.openai.baseUrl, apiKey, model, systemPrompt, messages);
+  } else if (provider === "deepseek") {
+    text = await fetchOpenAICompatible(AI_PROVIDERS.deepseek.baseUrl, apiKey, model, systemPrompt, messages);
   }
 
   const chunkSize = 6;
@@ -321,10 +287,10 @@ async function tryFallbackChain(
   for (const provider of FALLBACK_ORDER) {
     if (provider === skipProvider) continue;
 
-    const apiKey = config[PROVIDERS[provider].keyName];
+    const apiKey = config[AI_PROVIDERS[provider].envKey];
     if (!apiKey) continue;
 
-    const model = PROVIDERS[provider].defaultModel;
+    const model = AI_PROVIDERS[provider].defaultModel;
     send({ type: "thinking", content: `🔄 Tentando ${provider}/${model}...` });
 
     try {
@@ -380,7 +346,7 @@ export async function POST(req: NextRequest) {
       };
 
       try {
-        const apiKey = config[PROVIDERS[selectedProvider].keyName];
+        const apiKey = config[AI_PROVIDERS[selectedProvider].envKey];
 
         if (!apiKey) {
           send({ type: "thinking", content: `⚠️ API key não configurada para ${selectedProvider}. Buscando fallback...` });

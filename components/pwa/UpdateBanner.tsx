@@ -1,43 +1,93 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
 
+type LatestVersion = {
+  sha: string;
+  message: string;
+  createdAt: string | null;
+};
+
 export function UpdateBanner() {
   const [show, setShow] = useState(false);
   const [reg, setReg] = useState<ServiceWorkerRegistration | null>(null);
+  const [latest, setLatest] = useState<LatestVersion | null>(null);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
-    navigator.serviceWorker.register("/sw.js").then(r => {
-      setReg(r);
+    let active = true;
 
-      // New SW already waiting — show banner immediately
-      if (r.waiting) setShow(true);
+    const checkLatestVersion = async () => {
+      try {
+        const response = await fetch("/api/version/latest", { cache: "no-store" });
+        if (!response.ok) return;
 
-      r.addEventListener("updatefound", () => {
-        const newSW = r.installing;
-        if (!newSW) return;
+        const payload = await response.json();
+        const currentSha = process.env.NEXT_PUBLIC_COMMIT_SHA;
+        const dismissedSha = sessionStorage.getItem("jarvis:update-dismissed");
+        const latestSha = typeof payload?.sha === "string" ? payload.sha : "";
 
-        newSW.addEventListener("statechange", () => {
-          if (newSW.state === "installed" && navigator.serviceWorker.controller) {
-            setShow(true);
-          }
+        if (!active || !currentSha || !latestSha || latestSha === currentSha || dismissedSha === latestSha) {
+          return;
+        }
+
+        setLatest({
+          sha: latestSha,
+          message: payload.message || "Nova versão disponível",
+          createdAt: payload.createdAt || null,
         });
-      });
+        setShow(true);
+      } catch (error) {
+        console.warn("[PWA] Falha ao verificar versão:", (error as Error).message);
+      }
+    };
+
+    const setup = async () => {
+      const registration = await navigator.serviceWorker.register("/sw.js");
+      const readyRegistration = await navigator.serviceWorker.ready;
+
+      if (!active) return;
+      setReg(readyRegistration || registration);
+      await checkLatestVersion();
+    };
+
+    setup().catch((error) => {
+      console.warn("[PWA] Falha ao registrar service worker:", (error as Error).message);
     });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
-  // Check for updates every 5 minutes
-  useEffect(() => {
-    if (!reg) return;
-    const interval = setInterval(() => {
-      reg.update();
-    }, 5 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [reg]);
+  const dismiss = useCallback(() => {
+    if (latest?.sha) {
+      sessionStorage.setItem("jarvis:update-dismissed", latest.sha);
+    }
+    setShow(false);
+  }, [latest?.sha]);
 
-  const update = useCallback(() => {
-    reg?.waiting?.postMessage({ type: "SKIP_WAITING" });
+  const update = useCallback(async () => {
+    if (!reg) {
+      window.location.reload();
+      return;
+    }
+
+    const reload = () => window.location.reload();
+    navigator.serviceWorker.addEventListener("controllerchange", reload, { once: true });
+
+    if (reg.waiting) {
+      reg.waiting.postMessage({ type: "SKIP_WAITING" });
+      return;
+    }
+
+    await reg.update();
+
+    if (reg.waiting) {
+      reg.waiting.postMessage({ type: "SKIP_WAITING" });
+      return;
+    }
+
     window.location.reload();
   }, [reg]);
 
@@ -69,8 +119,19 @@ export function UpdateBanner() {
           fontFamily: "JetBrains Mono,monospace",
         }}
       >
-        🚀 Nova versão disponível
+        🚀 {latest?.message || "Nova versão disponível"}
       </span>
+      {latest?.createdAt && (
+        <span
+          style={{
+            fontSize: 11,
+            color: "var(--text-muted)",
+            fontFamily: "JetBrains Mono,monospace",
+          }}
+        >
+          {new Date(latest.createdAt).toLocaleString("pt-BR")}
+        </span>
+      )}
       <button
         onClick={update}
         style={{
@@ -88,7 +149,7 @@ export function UpdateBanner() {
         ATUALIZAR
       </button>
       <button
-        onClick={() => setShow(false)}
+        onClick={dismiss}
         style={{
           background: "transparent",
           border: "none",

@@ -1,12 +1,12 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useUIStore } from "@/store";
-import { createClient } from "@/lib/supabase/client";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
 
 const FIELDS = [
   { group: "🤖 ANTHROPIC",  fields: [{ key: "anthropicKey",  label: "ANTHROPIC_API_KEY",       hint: "sk-ant-..." }] },
   { group: "⚡ GROQ",       fields: [{ key: "groqKey",       label: "GROQ_API_KEY",             hint: "gsk_..." }] },
+  { group: "🧠 CEREBRAS",   fields: [{ key: "cerebrasKey",   label: "CEREBRAS_API_KEY",         hint: "csk_..." }] },
   { group: "🌟 GEMINI",     fields: [{ key: "geminiKey",     label: "GEMINI_API_KEY",           hint: "AIza..." }] },
   { group: "🔄 OPENROUTER", fields: [{ key: "openrouterKey", label: "OPENROUTER_API_KEY",       hint: "sk-or-..." }] },
   { group: "🤖 OPENAI",     fields: [{ key: "openaiKey",     label: "OPENAI_API_KEY",           hint: "sk-..." }] },
@@ -25,6 +25,7 @@ const FIELDS = [
 const KEY_MAP: Record<string, string> = {
   groqKey: "GROQ_API_KEY",
   anthropicKey: "ANTHROPIC_API_KEY",
+  cerebrasKey: "CEREBRAS_API_KEY",
   geminiKey: "GEMINI_API_KEY",
   openrouterKey: "OPENROUTER_API_KEY",
   openaiKey: "OPENAI_API_KEY",
@@ -42,19 +43,6 @@ const REVERSE_KEY_MAP = Object.fromEntries(
   Object.entries(KEY_MAP).map(([formKey, settingsKey]) => [settingsKey, formKey])
 ) as Record<string, string>;
 
-function encrypt(val: string): string {
-  if (!val) return "";
-  try { return "enc:" + btoa(val); } catch { return val; }
-}
-
-function decrypt(val: string): string {
-  if (!val) return "";
-  if (val.startsWith("enc:")) {
-    try { return atob(val.slice(4)); } catch { return val; }
-  }
-  return val;
-}
-
 export function SettingsPanel() {
   const { setShowSettings, showToast } = useUIStore();
   const bp = useBreakpoint();
@@ -63,72 +51,73 @@ export function SettingsPanel() {
   });
   const [saving, setSaving] = useState(false);
 
-  // Load from Supabase on mount (merges with localStorage, Supabase wins)
   useEffect(() => {
-    const supabase = createClient();
-    supabase
-      .from("settings")
-      .select("key, value")
-      .then(({ data, error }) => {
-        if (error || !data || data.length === 0) return;
-        const remote: Record<string, string> = {};
-        data.forEach((row: { key: string; value: string }) => {
-          const formKey = REVERSE_KEY_MAP[row.key] || row.key;
-          remote[formKey] = decrypt(row.value);
-        });
-        // Merge: remote wins over localStorage
+    let mounted = true;
+
+    const loadSettings = async () => {
+      try {
+        const response = await fetch("/api/settings", { cache: "no-store" });
+        if (response.status === 401) return;
+        if (!response.ok) throw new Error("Falha ao carregar settings");
+
+        const payload = await response.json();
+        const remoteEntries = Object.entries((payload?.settings || {}) as Record<string, string>);
+        if (remoteEntries.length === 0 || !mounted) return;
+
+        const remote = Object.fromEntries(
+          remoteEntries.map(([settingsKey, value]) => [REVERSE_KEY_MAP[settingsKey] || settingsKey, value])
+        );
+
         try {
           const local = JSON.parse(localStorage.getItem("jarvis_config") || "{}");
           const merged = { ...local, ...remote };
+          if (!mounted) return;
           setForm(merged);
           localStorage.setItem("jarvis_config", JSON.stringify(merged));
         } catch {
+          if (!mounted) return;
           setForm(remote);
         }
-      });
+      } catch (error) {
+        console.warn("Falha ao carregar settings via API:", (error as Error).message);
+      }
+    };
+
+    loadSettings();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const save = async () => {
-    // 1. Save to localStorage
     localStorage.setItem("jarvis_config", JSON.stringify(form));
-
-    // 2. Upsert to Supabase — map form keys to API key names the backend expects
     setSaving(true);
-    const supabase = createClient();
-    const { data: { user } } = await supabase.auth.getUser();
 
-    if (!user) {
-      showToast("Salvo apenas no localStorage (sem sessão)", "info");
+    try {
+      const settings = Object.fromEntries(
+        Object.entries(form).map(([key, value]) => [KEY_MAP[key] || key, value])
+      );
+
+      const response = await fetch("/api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings }),
+      });
+
+      if (response.status === 401) {
+        showToast("Salvo apenas no localStorage (sem sessão)", "info");
+      } else if (!response.ok) {
+        throw new Error("Falha ao salvar settings");
+      } else {
+        showToast("Configurações salvas no Supabase ✓", "success");
+      }
+    } catch (error) {
+      console.warn("Falha ao salvar settings via API:", (error as Error).message);
+      showToast("Salvo apenas no localStorage (Supabase indisponível)", "info");
+    } finally {
       setSaving(false);
-      setShowSettings(false);
-      return;
     }
 
-    const entries = Object.entries(form).filter(([, v]) => v);
-    const upserts = entries.map(([key, value]) => {
-      const settingsKey = KEY_MAP[key] || key;
-      return supabase
-        .from("settings")
-        .upsert(
-          { user_id: user.id, key: settingsKey, value: encrypt(value) },
-          { onConflict: "user_id,key" }
-        );
-    });
-
-    const results = await Promise.allSettled(upserts);
-    const failed = results.filter((result) => {
-      if (result.status === "rejected") return true;
-      return Boolean(result.value.error);
-    }).length;
-
-    setSaving(false);
-    if (failed === 0) {
-      showToast("Configuracoes salvas no Supabase ✓", "success");
-    } else if (failed < entries.length) {
-      showToast(`${entries.length - failed}/${entries.length} keys salvas`, "info");
-    } else {
-      showToast("Salvo apenas no localStorage (Supabase indisponivel)", "info");
-    }
     setShowSettings(false);
   };
 
@@ -153,12 +142,12 @@ export function SettingsPanel() {
       }}>
 
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontFamily: "Orbitron,sans-serif", fontSize: 16, color: "var(--neon-cyan)", letterSpacing: "0.15em" }}>⚙ CONFIGURACOES</span>
+          <span style={{ fontFamily: "Orbitron,sans-serif", fontSize: 16, color: "var(--neon-cyan)", letterSpacing: "0.15em" }}>⚙ CONFIGURAÇÕES</span>
           <button onClick={() => setShowSettings(false)} style={{ background: "transparent", border: "1px solid var(--border-glow)", color: "var(--text-secondary)", cursor: "pointer", borderRadius: 6, padding: "4px 10px", fontSize: 13 }}>✕</button>
         </div>
 
         <div style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "JetBrains Mono,monospace", border: "1px solid rgba(255,204,0,.2)", background: "rgba(255,204,0,.03)", padding: "10px 12px", borderRadius: 6, lineHeight: 1.6 }}>
-          💡 As keys sao salvas criptografadas no Supabase (tabela settings) e no localStorage como fallback.
+          💡 As keys são salvas via API autenticada no Supabase e no localStorage como fallback.
         </div>
 
         {FIELDS.map(group => (

@@ -3,38 +3,7 @@ import { useChatStore, useUIStore } from "@/store";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
-
-const PROVIDER_MODELS: Record<string, string[]> = {
-  groq: ["llama-3.3-70b-versatile", "llama-3.1-8b-instant", "gemma2-9b-it", "mixtral-8x7b-32768"],
-  anthropic: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5-20251001"],
-  openrouter: ["qwen/qwen3-235b-a22b:free", "deepseek/deepseek-r1:free", "google/gemini-2.0-flash-exp:free", "meta-llama/llama-3.3-70b-instruct:free"],
-  openai: ["gpt-4o", "gpt-4o-mini"],
-  gemini: ["gemini-2.0-flash-exp", "gemini-1.5-pro"],
-};
-
-const PROVIDER_LABELS: Record<string, string> = {
-  groq: "Groq",
-  anthropic: "Anthropic",
-  openrouter: "OpenRouter",
-  openai: "OpenAI",
-  gemini: "Gemini",
-};
-
-const PROVIDER_ICONS: Record<string, string> = {
-  anthropic: "🤖",
-  groq: "⚡",
-  openrouter: "🔀",
-  openai: "🧠",
-  gemini: "🌟",
-};
-
-const PROVIDER_COLORS: Record<string, string> = {
-  anthropic: "var(--neon-cyan)",
-  groq: "#ff9d00",
-  openrouter: "#a855f7",
-  openai: "#10a37f",
-  gemini: "#4285f4",
-};
+import { AI_PROVIDERS, PROVIDER_OPTIONS, findProviderByModel } from "@/lib/ai/providers";
 
 const selectStyle: React.CSSProperties = {
   background: "var(--bg-card)",
@@ -70,8 +39,9 @@ export function TopBar() {
 
   const statusLabel = agentStatus === "idle" ? "ONLINE" : agentStatus === "thinking" ? "PROCESSANDO" : "RESPONDENDO";
   const isActive = agentStatus !== "idle";
-  const providerColor = PROVIDER_COLORS[aiProvider] || "var(--neon-cyan)";
-  const providerIcon = PROVIDER_ICONS[aiProvider] || "🤖";
+  const currentProvider = AI_PROVIDERS[aiProvider as keyof typeof AI_PROVIDERS];
+  const providerColor = currentProvider?.color || "var(--neon-cyan)";
+  const providerIcon = currentProvider?.icon || "🤖";
 
   const toggleTTS = () => {
     const next = !ttsEnabled;
@@ -82,13 +52,20 @@ export function TopBar() {
   const handleProviderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const p = e.target.value;
     setAiProvider(p);
-    const models = PROVIDER_MODELS[p];
+    const models = AI_PROVIDERS[p as keyof typeof AI_PROVIDERS]?.models;
     if (models && models.length > 0) {
       setAiModel(models[0]);
     }
   };
 
-  const models = PROVIDER_MODELS[aiProvider] || [];
+  const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const nextModel = e.target.value;
+    const nextProvider = findProviderByModel(nextModel);
+    if (nextProvider) {
+      setAiProvider(nextProvider);
+    }
+    setAiModel(nextModel);
+  };
 
   const handleLogout = async () => {
     const supabase = createClient();
@@ -133,7 +110,7 @@ export function TopBar() {
           }}>
             <span style={{ fontSize: 11 }}>{providerIcon}</span>
             <span style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 9, color: providerColor }}>
-              {PROVIDER_LABELS[aiProvider]}
+              {currentProvider?.label || aiProvider}
             </span>
             <div className="ldrs-ring" style={{ width: 10, height: 10, color: providerColor }} />
           </div>
@@ -157,14 +134,20 @@ export function TopBar() {
         {/* Provider + Model selector — compact on tablet */}
         <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
           <select value={aiProvider} onChange={handleProviderChange} style={{ ...selectStyle, maxWidth: isTablet ? 60 : 130, fontSize: isTablet ? 9 : 10 }}>
-            {Object.entries(PROVIDER_LABELS).map(([k, v]) => (
-              <option key={k} value={k}>{PROVIDER_ICONS[k]} {isTablet ? "" : v}</option>
+            {PROVIDER_OPTIONS.map((provider) => (
+              <option key={provider.id} value={provider.id}>{provider.icon} {isTablet ? "" : provider.label}</option>
             ))}
           </select>
           {!isMobile && (
-            <select value={aiModel} onChange={e => setAiModel(e.target.value)} style={{ ...selectStyle, maxWidth: isTablet ? 90 : 130 }}>
-              {models.map(m => (
-                <option key={m} value={m}>{m.split("/").pop()}</option>
+            <select value={aiModel} onChange={handleModelChange} style={{ ...selectStyle, maxWidth: isTablet ? 90 : 220 }}>
+              {PROVIDER_OPTIONS.map((provider) => (
+                <optgroup key={provider.id} label={provider.label}>
+                  {provider.models.map((model) => (
+                    <option key={`${provider.id}:${model}`} value={model}>
+                      {model}
+                    </option>
+                  ))}
+                </optgroup>
               ))}
             </select>
           )}

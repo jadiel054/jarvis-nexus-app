@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import type { Message, ToolCall, Plan, SSEEvent } from "@/types";
 import { useChatStore, useMemoryStore, useUIStore } from "@/store";
 import { useBreakpoint } from "@/hooks/useBreakpoint";
+import { extractAttachmentText, readAttachmentPreview } from "@/lib/files/extractText";
 
 
 // ═══════════════════════════════════════════════════════════════
@@ -150,7 +151,7 @@ const JarvisTTS = {
 interface Attachment {
   id: string;
   name: string;
-  type: "image" | "pdf" | "word" | "excel" | "html" | "text" | "link";
+  type: "image" | "pdf" | "word" | "excel" | "html" | "text" | "zip" | "link";
   size?: number;
   data?: string;       // base64 for binary files
   text?: string;       // extracted text content
@@ -167,37 +168,20 @@ async function processFile(file: File): Promise<Attachment> {
   const isExcel = file.type.includes("spreadsheetml") || ext === "xlsx" || ext === "xls" || ext === "csv";
   const isHTML = file.type === "text/html" || ext === "html" || ext === "htm";
   const isText = file.type.startsWith("text/") || ["txt","md","json","ts","tsx","js","py","sql","yaml","yml","env"].includes(ext);
+  const isZip = file.type === "application/zip" || file.type === "application/x-zip-compressed" || ext === "zip";
 
   if (isImage) {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const dataUrl = e.target?.result as string;
-        resolve({ id, name: file.name, type: "image", size: file.size, data: dataUrl.split(",")[1], preview: dataUrl });
-      };
-      reader.readAsDataURL(file);
-    });
+    const dataUrl = await readAttachmentPreview(file);
+    return { id, name: file.name, type: "image", size: file.size, data: dataUrl.split(",")[1], preview: dataUrl };
   }
 
-  if (isText || isHTML || isExcel || isWord || isPDF) {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const content = e.target?.result as string;
-        const type = isPDF ? "pdf" : isWord ? "word" : isExcel ? "excel" : isHTML ? "html" : "text";
-        resolve({ id, name: file.name, type, size: file.size, text: content.slice(0, 50000) });
-      };
-      if (isText || isHTML) reader.readAsText(file);
-      else reader.readAsDataURL(file);  // binary files as base64
-    });
+  try {
+    const text = await extractAttachmentText(file);
+    const type = isPDF ? "pdf" : isWord ? "word" : isExcel ? "excel" : isHTML ? "html" : isZip ? "zip" : isText ? "text" : "text";
+    return { id, name: file.name, type, size: file.size, text };
+  } catch {
+    throw new Error(`Não consegui extrair o conteúdo de ${file.name}. Pode colar o texto relevante diretamente?`);
   }
-
-  // Unknown type — read as text
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = (e) => resolve({ id, name: file.name, type: "text", size: file.size, text: (e.target?.result as string).slice(0, 30000) });
-    reader.readAsText(file);
-  });
 }
 
 function buildAttachmentContext(attachments: Attachment[]): string {
@@ -205,13 +189,9 @@ function buildAttachmentContext(attachments: Attachment[]): string {
   const parts = attachments.map(att => {
     if (att.type === "link") return "[Link anexado: " + att.url + "]\nBusque e analise o conteúdo desse link usando tavily_search.";
     if (att.type === "image") return "[Imagem anexada: " + att.name + "]\nA imagem foi incluída na mensagem acima em base64.";
-    if (att.type === "pdf") return "[PDF anexado: " + att.name + "]\nConteúdo:\n```\n" + (att.text?.slice(0, 8000) || "") + "\n```";
-    if (att.type === "word") return "[Word (.docx): " + att.name + "]\nConteúdo:\n```\n" + (att.text?.slice(0, 8000) || "") + "\n```";
-    if (att.type === "excel") return "[Excel/CSV: " + att.name + "]\nDados:\n```\n" + (att.text?.slice(0, 8000) || "") + "\n```";
-    if (att.type === "html") return "[HTML: " + att.name + "]\n```html\n" + (att.text?.slice(0, 8000) || "") + "\n```";
-    return "[Arquivo: " + att.name + "]\n```\n" + (att.text?.slice(0, 6000) || "") + "\n```";
+    return `[Conteúdo extraído de "${att.name}"]\n${att.text?.slice(0, 12000) || ""}`;
   });
-  return "\n\n---\n**Arquivos anexados:**\n" + parts.join("\n\n");
+  return "\n\n" + parts.join("\n\n");
 }
 
 // ── RELATIVE TIME ─────────────────────────────────────────────
@@ -419,6 +399,29 @@ export default function ChatInterface() {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const processIncomingFiles = useCallback(async (files: File[]) => {
+    if (files.length === 0) return;
+
+    showToast(`Processando ${files.length} arquivo(s)...`, "info");
+    const results = await Promise.allSettled(files.map(processFile));
+    const successful = results
+      .filter((result): result is PromiseFulfilledResult<Attachment> => result.status === "fulfilled")
+      .map((result) => result.value);
+
+    results
+      .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+      .forEach((result) => {
+        showToast(result.reason instanceof Error ? result.reason.message : "Não consegui extrair o conteúdo do arquivo.", "error", 5000);
+      });
+
+    if (successful.length > 0) {
+      setAttachments((prev) => [...prev, ...successful]);
+      showToast(`✓ ${successful.length} arquivo(s) prontos`, "success");
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, [showToast]);
+
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, streamingText]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -433,7 +436,7 @@ export default function ChatInterface() {
 
   const sendMessage = useCallback(async (text?: string) => {
     const userText = (text || input).trim();
-    if (!userText || isLoading) return;
+    if ((!userText && attachments.length === 0) || isLoading) return;
 
     setInput("");
     setIsLoading(true);
@@ -442,11 +445,12 @@ export default function ChatInterface() {
 
     // Build display text + attachment context
     const attContext = buildAttachmentContext(attachments);
-    const fullUserText = userText + attContext;
+    const fullUserText = [userText, attContext].filter(Boolean).join("");
+    const attachmentLabel = attachments.map(a => a.type === "link" ? a.url : a.name).join(", ");
 
-    const userMsg: Message = { id: `u_${Date.now()}`, role: "user", content: userText + (attachments.length > 0 ? `
+    const userMsg: Message = { id: `u_${Date.now()}`, role: "user", content: (userText || "Analisar arquivos anexados.") + (attachments.length > 0 ? `
 
-📎 ${attachments.map(a => a.type === "link" ? a.url : a.name).join(", ")}` : ""), created_at: new Date().toISOString() };
+📎 ${attachmentLabel}` : ""), created_at: new Date().toISOString() };
     addMessage(userMsg);
 
     const assistantId = `a_${Date.now()}`;
@@ -480,10 +484,10 @@ export default function ChatInterface() {
       persistMessages();
 
       // Add to evolution log
-      addEvolutionEntry({ at: new Date().toISOString(), type: "conversation", summary: userText.slice(0, 60), tools_used: allToolCalls.length });
+      addEvolutionEntry({ at: new Date().toISOString(), type: "conversation", summary: (userText || attachmentLabel || "Arquivos anexados").slice(0, 60), tools_used: allToolCalls.length });
 
       // Token estimate
-      const est = Math.ceil((finalText.length + userText.length) / 4);
+      const est = Math.ceil((finalText.length + fullUserText.length) / 4);
       useChatStore.getState().setTokenCount(est);
     };
 
@@ -634,7 +638,7 @@ export default function ChatInterface() {
     setIsLoading(false);
     setAgentStatus("idle");
     inputRef.current?.focus();
-  }, [input, isLoading, messages, addMessage, updateMessage, setAgentStatus, setStreamingText, setActivePlan, updatePlanStep, persistMessages, addEvolutionEntry, showToast, aiProvider, aiModel]);
+  }, [input, isLoading, attachments, messages, addMessage, updateMessage, setAgentStatus, setStreamingText, setActivePlan, updatePlanStep, persistMessages, addEvolutionEntry, showToast, aiProvider, aiModel]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
@@ -757,7 +761,7 @@ export default function ChatInterface() {
                 <img src={att.preview} alt={att.name} style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 4, flexShrink: 0 }} />
               ) : (
                 <span style={{ flexShrink: 0, fontSize: 14 }}>
-                  {att.type === "pdf" ? "📄" : att.type === "word" ? "📝" : att.type === "excel" ? "📊" : att.type === "html" ? "🌐" : att.type === "link" ? "🔗" : "📁"}
+                  {att.type === "pdf" ? "📄" : att.type === "word" ? "📝" : att.type === "excel" ? "📊" : att.type === "html" ? "🌐" : att.type === "zip" ? "🗜️" : att.type === "link" ? "🔗" : "📁"}
                 </span>
               )}
               <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
@@ -796,15 +800,10 @@ export default function ChatInterface() {
 
       {/* Hidden file input */}
       <input ref={fileInputRef} type="file" multiple style={{ display: "none" }}
-        accept="image/*,.pdf,.docx,.doc,.xlsx,.xls,.csv,.html,.htm,.txt,.md,.json,.ts,.tsx,.js,.py,.sql"
+        accept="image/*,.pdf,.docx,.doc,.xlsx,.xls,.csv,.html,.htm,.txt,.md,.json,.ts,.tsx,.js,.py,.sql,.zip"
         onChange={async (e) => {
           const files = Array.from(e.target.files || []);
-          if (files.length === 0) return;
-          showToast(`Processando ${files.length} arquivo(s)...`, "info");
-          const processed = await Promise.all(files.map(processFile));
-          setAttachments(prev => [...prev, ...processed]);
-          showToast(`✓ ${files.length} arquivo(s) prontos`, "success");
-          if (fileInputRef.current) fileInputRef.current.value = "";
+          await processIncomingFiles(files);
         }}
       />
 
@@ -815,12 +814,7 @@ export default function ChatInterface() {
           onBlur={e => { e.currentTarget.style.borderColor = "var(--border-glow)"; }}
           onDrop={async (e) => {
             e.preventDefault();
-            const files = Array.from(e.dataTransfer.files);
-            if (files.length === 0) return;
-            showToast(`Processando ${files.length} arquivo(s)...`, "info");
-            const processed = await Promise.all(files.map(processFile));
-            setAttachments(prev => [...prev, ...processed]);
-            showToast(`✓ ${files.length} arquivo(s) prontos`, "success");
+            await processIncomingFiles(Array.from(e.dataTransfer.files));
           }}
           onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = "rgba(0,245,255,.6)"; }}
           onDragLeave={e => { e.currentTarget.style.borderColor = "var(--border-glow)"; }}
@@ -840,7 +834,7 @@ export default function ChatInterface() {
         >
           {/* Attach file button */}
           <button onClick={() => fileInputRef.current?.click()}
-            title="Anexar arquivo (imagem, PDF, Word, Excel, HTML, código)"
+            title="Anexar arquivo (imagem, PDF, Word, Excel, ZIP, HTML, código)"
             style={{ background: "transparent", border: "1px solid var(--border-glow)", color: "var(--text-secondary)", borderRadius: 7, padding: "7px 9px", cursor: "pointer", fontSize: 14, flexShrink: 0, transition: "all .2s" }}
             onMouseOver={e => { (e.currentTarget as HTMLElement).style.color = "var(--neon-cyan)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(0,245,255,.4)"; }}
             onMouseOut={e => { (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--border-glow)"; }}>
