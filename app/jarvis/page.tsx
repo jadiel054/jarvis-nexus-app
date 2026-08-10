@@ -12,6 +12,8 @@ import { InstallPrompt } from "@/components/pwa/InstallPrompt";
 import { PushPrompt } from "@/components/pwa/PushPrompt";
 import { useChatStore, useUIStore } from "@/store";
 
+import { useCallback } from "react";
+
 export default function JarvisPage() {
   const [booting, setBooting] = useState(true);
   const { showSettings, showMemories, toasts } = useUIStore();
@@ -24,11 +26,15 @@ export default function JarvisPage() {
     }
   }, [booting, conversations.length, newConversation]);
 
+  const handleBootDone = useCallback(() => {
+    setBooting(false);
+  }, []);
+
   return (
     <div style={{ height: "100vh", width: "100vw", display: "flex", flexDirection: "column", position: "relative", overflow: "hidden", zIndex: 2 }}>
       <ToastContainer toasts={toasts} />
 
-      {booting && <BootSequence onDone={() => setBooting(false)} />}
+      {booting && <BootSequence onDone={handleBootDone} />}
 
       {!booting && (
         <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
