@@ -11,11 +11,18 @@ const BOOT_ITEMS = [
 
 interface BootSequenceProps { onDone: () => void; }
 
+import { useRef } from "react";
+
 export function BootSequence({ onDone }: BootSequenceProps) {
   const [phase, setPhase] = useState(0);
   const [visibleCards, setVisibleCards] = useState<number[]>([]);
   const [barWidths, setBarWidths] = useState(BOOT_ITEMS.map(() => 0));
   const [leaving, setLeaving] = useState(false);
+
+  const onDoneRef = useRef(onDone);
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase(1), 600);
@@ -25,16 +32,40 @@ export function BootSequence({ onDone }: BootSequenceProps) {
 
   useEffect(() => {
     if (phase !== 2) return;
+
+    const timers: NodeJS.Timeout[] = [];
+
     BOOT_ITEMS.forEach((item, i) => {
-      setTimeout(() => {
-        setVisibleCards(prev => [...prev, i]);
-        setTimeout(() => setBarWidths(prev => { const n = [...prev]; n[i] = item.pct; return n; }), 100);
+      const cardTimer = setTimeout(() => {
+        setVisibleCards(prev => {
+          if (prev.includes(i)) return prev;
+          return [...prev, i];
+        });
+        const barTimer = setTimeout(() => {
+          setBarWidths(prev => {
+            const n = [...prev];
+            n[i] = item.pct;
+            return n;
+          });
+        }, 100);
+        timers.push(barTimer);
       }, 300 + i * 350);
+      timers.push(cardTimer);
     });
+
     const total = 300 + BOOT_ITEMS.length * 350 + 1000;
-    setTimeout(() => setLeaving(true), total);
-    setTimeout(onDone, total + 500);
-  }, [phase, onDone]);
+
+    const tLeave = setTimeout(() => setLeaving(true), total);
+    const tDone = setTimeout(() => {
+      onDoneRef.current();
+    }, total + 500);
+
+    timers.push(tLeave, tDone);
+
+    return () => {
+      timers.forEach(clearTimeout);
+    };
+  }, [phase]);
 
   return (
     <div style={{
