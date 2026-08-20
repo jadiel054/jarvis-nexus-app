@@ -4,6 +4,7 @@ import { NextRequest } from "next/server";
 import { allTools } from "@/lib/tools";
 import { toolExecutor } from "@/lib/agent/toolExecutor";
 import { getSystemPrompt } from "@/lib/agent/systemPrompt";
+import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 import { AI_PROVIDERS, FALLBACK_ORDER, type ProviderId } from "@/lib/ai/providers";
 
 export const dynamic = "force-dynamic";
@@ -25,13 +26,30 @@ function decryptSettingValue(value: string | null | undefined): string {
 async function getConfigFromSettings(): Promise<Record<string, string>> {
   const config: Record<string, string> = {};
 
+  // Se houver sessão, limita a leitura às chaves do próprio usuário
+  // (o service role ignora RLS: sem filtro, chaves de TODOS os usuários se misturam)
+  let ownerId: string | null = null;
+  try {
+    const supabase = createServerSupabaseClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    ownerId = user?.id ?? null;
+  } catch {
+    ownerId = null;
+  }
+
   try {
     const { createClient } = await import("@supabase/supabase-js");
     const admin = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
-    const { data, error } = await admin.from("settings").select("key, value");
+    let builder = admin.from("settings").select("key, value");
+    if (ownerId) {
+      builder = builder.eq("user_id", ownerId);
+    }
+    const { data, error } = await builder;
 
     if (!error && Array.isArray(data)) {
       for (const row of data) {
@@ -74,8 +92,22 @@ async function fetchOpenAICompatible(
   model: string,
   systemPrompt: string,
   messages: ChatMessage[],
-  extraHeaders?: Record<string, string>
+  extraHeaders?: Record<string, string>,
+  opts?: { reasoningModel?: boolean }
 ): Promise<string> {
+  const body: Record<string, unknown> = {
+    model,
+    messages: [{ role: "system", content: systemPrompt }, ...messages],
+  };
+
+  // Reasoning models (ex.: gpt-oss-120b na Cerebras) exigem max_completion_tokens
+  // e o orçamento inclui os tokens de raciocínio — max_tokens é rejeitado/ignorado.
+  if (opts?.reasoningModel) {
+    body.max_completion_tokens = 8192;
+  } else {
+    body.max_tokens = 4096;
+  }
+
   const response = await fetch(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
@@ -83,11 +115,7 @@ async function fetchOpenAICompatible(
       Authorization: `Bearer ${apiKey}`,
       ...(extraHeaders || {}),
     },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: "system", content: systemPrompt }, ...messages],
-      max_tokens: 4096,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
@@ -96,7 +124,18 @@ async function fetchOpenAICompatible(
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || "";
+  const message = data.choices?.[0]?.message;
+  const content = typeof message?.content === "string" ? message.content : "";
+  const reasoning = typeof message?.reasoning === "string" ? message.reasoning : "";
+  const text = (content || reasoning).trim();
+
+  // Modelo de raciocínio pode exaurir o orçamento em reasoning e devolver content:null.
+  // Se nem reasoning vier, lança erro para o fallback chain atuar em vez de responder vazio.
+  if (!text) {
+    throw new Error(`${baseUrl}: resposta vazia (reasoning exauriu o orçamento de tokens)`);
+  }
+
+  return text;
 }
 
 async function fetchSimpleProvider(
@@ -148,7 +187,15 @@ async function fetchSimpleProvider(
   } else if (provider === "groq") {
     text = await fetchOpenAICompatible(AI_PROVIDERS.groq.baseUrl, apiKey, model, systemPrompt, messages);
   } else if (provider === "cerebras") {
-    text = await fetchOpenAICompatible(AI_PROVIDERS.cerebras.baseUrl, apiKey, model, systemPrompt, messages);
+    text = await fetchOpenAICompatible(
+      AI_PROVIDERS.cerebras.baseUrl,
+      apiKey,
+      model,
+      systemPrompt,
+      messages,
+      undefined,
+      { reasoningModel: AI_PROVIDERS.cerebras.reasoning }
+    );
   } else if (provider === "openai") {
     text = await fetchOpenAICompatible(AI_PROVIDERS.openai.baseUrl, apiKey, model, systemPrompt, messages);
   } else if (provider === "deepseek") {
