@@ -21,6 +21,7 @@ export const AI_PROVIDERS = {
     baseUrl: "https://api.cerebras.ai/v1",
     models: ["gpt-oss-120b"],
     defaultModel: "gpt-oss-120b",
+    reasoning: true, // gpt-oss-120b é reasoning model: exige max_completion_tokens e pode retornar content:null (+ campo reasoning)
   },
   openrouter: {
     envKey: "OPENROUTER_API_KEY",
