@@ -350,13 +350,21 @@ export async function toolExecutor(name: string, input: Record<string, any>): Pr
 
       // ── MEMORY ───────────────────────────────────────────────
       case "memory_save": {
-        const r = await fetch(`${BASE}/api/supabase/memory`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "save", content: input.content, category: input.category, project: input.project }) });
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (process.env.INTERNAL_API_SECRET) {
+          headers["x-internal-secret"] = process.env.INTERNAL_API_SECRET;
+        }
+        const r = await fetch(`${BASE}/api/supabase/memory`, { method: "POST", headers, body: JSON.stringify({ action: "save", content: input.content, category: input.category, project: input.project }) });
         if (!r.ok) return { error: "Falha ao salvar memória" };
         return await r.json();
       }
 
       case "memory_search": {
-        const r = await fetch(`${BASE}/api/supabase/memory`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "search", query: input.query, limit: input.limit || 8, category: input.category }) });
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (process.env.INTERNAL_API_SECRET) {
+          headers["x-internal-secret"] = process.env.INTERNAL_API_SECRET;
+        }
+        const r = await fetch(`${BASE}/api/supabase/memory`, { method: "POST", headers, body: JSON.stringify({ action: "search", query: input.query, limit: input.limit || 8, category: input.category }) });
         if (!r.ok) return { error: "Falha ao buscar memórias" };
         return await r.json();
       }

@@ -1,7 +1,23 @@
 // app/api/telegram/webhook/comando/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
+
+function validateTelegramSecret(req: NextRequest): boolean {
+  const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
+  if (!secret) return false;
+  const token = req.headers.get("x-telegram-bot-api-secret-token");
+  if (!token) return false;
+  const bufA = Buffer.from(token);
+  const bufB = Buffer.from(secret);
+  if (bufA.length !== bufB.length) return false;
+  return crypto.timingSafeEqual(bufA, bufB);
+}
 
 export async function POST(req: NextRequest) {
+  if (!validateTelegramSecret(req)) {
+    return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+  }
+
   const body = await req.json();
   const message = body?.message;
   if (!message?.text) return NextResponse.json({ ok: true });
@@ -25,10 +41,15 @@ export async function POST(req: NextRequest) {
   });
 
   try {
+    const chatHeaders: Record<string, string> = { "Content-Type": "application/json" };
+    if (process.env.INTERNAL_API_SECRET) {
+      chatHeaders["x-internal-secret"] = process.env.INTERNAL_API_SECRET;
+    }
+
     // Call Jarvis chat endpoint
     const chatRes = await fetch(`${appUrl}/api/ai/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: chatHeaders,
       body: JSON.stringify({ messages: [{ role: "user", content: text }] }),
     });
 

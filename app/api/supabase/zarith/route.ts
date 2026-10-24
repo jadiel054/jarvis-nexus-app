@@ -1,7 +1,13 @@
 // app/api/supabase/zarith/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth/guard";
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   const { task, context, repo, priority = "normal" } = await req.json();
 
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;

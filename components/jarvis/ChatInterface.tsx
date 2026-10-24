@@ -387,7 +387,7 @@ export default function ChatInterface() {
   const isMobile = bp === "mobile";
   const isTablet = bp === "tablet";
   const { addMemory, addEvolutionEntry } = useMemoryStore();
-  const { showToast, activePlan, setActivePlan, updatePlanStep, aiProvider, aiModel } = useUIStore();
+  const { showToast, activePlan, setActivePlan, updatePlanStep, aiProvider, aiModel, setShowSettings } = useUIStore();
 
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -478,6 +478,9 @@ export default function ChatInterface() {
         currentPlan = { ...currentPlan, steps: finalSteps };
         setActivePlan(currentPlan);
       }
+
+      // Ensure no running tool calls are left hanging
+      allToolCalls = allToolCalls.map(tc => tc.status === "running" ? { ...tc, status: "error" as const } : tc);
 
       updateMessage(assistantId, { content: finalText, toolCalls: allToolCalls, narrations: allNarrations, plan: currentPlan || undefined, streaming: false });
       setStreamingText("");
@@ -614,24 +617,29 @@ export default function ChatInterface() {
             }
             case "error": {
               showToast(`Erro: ${event.message?.slice(0,60)}`, "error");
-              updateMessage(assistantId, { content: `❌ ${event.message}`, streaming: false });
+              allToolCalls = allToolCalls.map(tc => tc.status === "running" ? { ...tc, status: "error" as const } : tc);
+              const errText = finalText ? `${finalText}\n\n❌ ${event.message}` : `❌ ${event.message}`;
+              updateMessage(assistantId, { content: errText, toolCalls: allToolCalls, narrations: allNarrations, plan: currentPlan || undefined, streaming: false });
               setStreamingText("");
+              persistMessages();
+              finished = true;
               break;
             }
           }
         }
       }
 
-      if (sseBuffer.trim().startsWith("data: ")) {
-        const payload = sseBuffer.trim().slice(6).trim();
-        if (payload === "[DONE]") {
-          finishResponse();
-        }
+      if (!finished) {
+        finishResponse();
       }
     } catch (err) {
       showToast(`Falhou: ${(err as Error).message}`, "error");
-      updateMessage(assistantId, { content: `❌ ${(err as Error).message}`, streaming: false });
+      allToolCalls = allToolCalls.map(tc => tc.status === "running" ? { ...tc, status: "error" as const } : tc);
+      const errText = finalText ? `${finalText}\n\n❌ ${(err as Error).message}` : `❌ ${(err as Error).message}`;
+      updateMessage(assistantId, { content: errText, toolCalls: allToolCalls, narrations: allNarrations, plan: currentPlan || undefined, streaming: false });
       setStreamingText("");
+      persistMessages();
+      finished = true;
     }
 
     setAttachments([]);
@@ -738,12 +746,12 @@ export default function ChatInterface() {
       {/* Quick hints */}
       <div style={{ padding: isMobile ? "4px 8px 0" : "4px 20px 0", display: "flex", gap: 6, flexWrap: "wrap", background: "rgba(2,2,8,.95)" }}>
         {[
-          { label: "⚙ settings", cmd: "abra settings" },
-          { label: "🐙 repos", cmd: "liste meus repositórios" },
-          { label: "🔬 analisar", cmd: "analise o repo jadiel054/jarvis-nexus-app" },
-          { label: "▲ vercel", cmd: "liste meus projetos no Vercel" },
+          { label: "⚙ settings", action: () => setShowSettings(true) },
+          { label: "🐙 repos", action: () => sendMessage("liste meus repositórios") },
+          { label: "🔬 analisar", action: () => sendMessage("analise o repo jadiel054/jarvis-nexus-app") },
+          { label: "▲ vercel", action: () => sendMessage("liste meus projetos no Vercel") },
         ].map(h => (
-          <button key={h.cmd} onClick={() => sendMessage(h.cmd)}
+          <button key={h.label} onClick={h.action}
             style={{ background: "transparent", border: "1px solid var(--border-glow)", color: "var(--text-secondary)", fontFamily: "JetBrains Mono,monospace", fontSize: 10, padding: "3px 8px", borderRadius: 4, cursor: "pointer", transition: "all .2s" }}
             onMouseOver={e => { (e.currentTarget as HTMLElement).style.color = "var(--neon-cyan)"; (e.currentTarget as HTMLElement).style.borderColor = "rgba(0,245,255,.4)"; }}
             onMouseOut={e => { (e.currentTarget as HTMLElement).style.color = "var(--text-secondary)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--border-glow)"; }}>

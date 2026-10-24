@@ -1,8 +1,14 @@
 // app/api/agent/health/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth/guard";
 
 // GET — Jarvis consulta saúde de um agente
 export async function GET(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   const agentName = req.nextUrl.searchParams.get("agent");
   const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -43,6 +49,11 @@ export async function GET(req: NextRequest) {
 
 // POST — Agente registra seu heartbeat
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   const body = await req.json();
   const {
     agent,

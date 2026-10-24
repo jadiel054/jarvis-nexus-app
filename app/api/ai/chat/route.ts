@@ -4,8 +4,8 @@ import { NextRequest } from "next/server";
 import { allTools } from "@/lib/tools";
 import { toolExecutor } from "@/lib/agent/toolExecutor";
 import { getSystemPrompt } from "@/lib/agent/systemPrompt";
-import { createClient as createServerSupabaseClient } from "@/lib/supabase/server";
 import { AI_PROVIDERS, FALLBACK_ORDER, type ProviderId } from "@/lib/ai/providers";
+import { requireAuth, type AuthResult } from "@/lib/auth/guard";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -23,43 +23,128 @@ function decryptSettingValue(value: string | null | undefined): string {
   }
 }
 
-async function getConfigFromSettings(): Promise<Record<string, string>> {
-  const config: Record<string, string> = {};
+function truncateResult(toolName: string, result: unknown): string {
+  const maxLen = toolName === "github_read_file" ? 40000 : 12000;
+  const originalJson = typeof result === "string" ? result : JSON.stringify(result ?? null);
+  const originalLength = originalJson.length;
 
-  // Se houver sessão, limita a leitura às chaves do próprio usuário
-  // (o service role ignora RLS: sem filtro, chaves de TODOS os usuários se misturam)
-  let ownerId: string | null = null;
-  try {
-    const supabase = createServerSupabaseClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    ownerId = user?.id ?? null;
-  } catch {
-    ownerId = null;
+  if (originalLength <= maxLen) {
+    return originalJson;
   }
 
-  try {
-    const { createClient } = await import("@supabase/supabase-js");
-    const admin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
-    let builder = admin.from("settings").select("key, value");
-    if (ownerId) {
-      builder = builder.eq("user_id", ownerId);
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    const obj = result as Record<string, unknown>;
+    if (toolName === "github_read_file" && typeof obj.content === "string") {
+      const truncatedContent = obj.content.slice(0, maxLen - 500) + "\n...[conteúdo truncado]";
+      return JSON.stringify({
+        ...obj,
+        content: truncatedContent,
+        truncated: true,
+        original_length: originalLength,
+      });
     }
-    const { data, error } = await builder;
 
-    if (!error && Array.isArray(data)) {
-      for (const row of data) {
-        if (row?.key && typeof row.value === "string") {
-          config[row.key] = decryptSettingValue(row.value);
+    return JSON.stringify({
+      ...obj,
+      truncated: true,
+      original_length: originalLength,
+    });
+  }
+
+  if (Array.isArray(result)) {
+    return JSON.stringify({
+      results: result.slice(0, 15),
+      truncated: true,
+      original_length: originalLength,
+    });
+  }
+
+  return JSON.stringify({
+    content: String(result).slice(0, maxLen - 200) + "...[truncado]",
+    truncated: true,
+    original_length: originalLength,
+  });
+}
+
+function formatResultForBrowser(result: unknown): unknown {
+  if (result && typeof result === "object" && !Array.isArray(result)) {
+    const obj = { ...(result as Record<string, unknown>) };
+    if ("content" in obj) {
+      const rawContent = obj.content;
+      const contentLength = typeof rawContent === "string" ? rawContent.length : (rawContent ? String(rawContent).length : 0);
+      delete obj.content;
+      obj.content_length = contentLength;
+    }
+
+    const jsonStr = JSON.stringify(obj);
+    if (jsonStr.length > 2000) {
+      return {
+        ...obj,
+        _preview: jsonStr.slice(0, 1800) + "...[truncado]",
+        truncated: true,
+      };
+    }
+    return obj;
+  }
+
+  if (Array.isArray(result)) {
+    const jsonStr = JSON.stringify(result);
+    if (jsonStr.length > 2000) {
+      return {
+        total_items: result.length,
+        items_preview: result.slice(0, 5),
+        truncated: true,
+      };
+    }
+    return result;
+  }
+
+  if (typeof result === "string") {
+    if (result.length > 2000) {
+      return {
+        text_preview: result.slice(0, 1800) + "...[truncado]",
+        original_length: result.length,
+        truncated: true,
+      };
+    }
+    return result;
+  }
+
+  return result;
+}
+
+async function getConfigFromSettings(auth: AuthResult & { authorized: true }): Promise<Record<string, string>> {
+  const config: Record<string, string> = {};
+
+  let ownerId: string | null = null;
+  if (auth.user) {
+    ownerId = auth.user.id;
+  } else if (auth.isInternal && process.env.OWNER_USER_ID) {
+    ownerId = process.env.OWNER_USER_ID;
+  }
+
+  if (ownerId) {
+    try {
+      const { createClient } = await import("@supabase/supabase-js");
+      const admin = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!
+      );
+      const { data, error } = await admin
+        .from("settings")
+        .select("key, value")
+        .eq("user_id", ownerId);
+
+      if (!error && Array.isArray(data)) {
+        for (const row of data) {
+          if (row?.key && typeof row.value === "string") {
+            config[row.key] = decryptSettingValue(row.value);
+          }
         }
       }
+    } catch (error) {
+      console.warn("Falha ao ler settings do Supabase:", (error as Error).message);
     }
-  } catch (error) {
-    console.warn("Falha ao ler settings do Supabase:", (error as Error).message);
   }
 
   for (const provider of Object.values(AI_PROVIDERS)) {
@@ -100,8 +185,6 @@ async function fetchOpenAICompatible(
     messages: [{ role: "system", content: systemPrompt }, ...messages],
   };
 
-  // Reasoning models (ex.: gpt-oss-120b na Cerebras) exigem max_completion_tokens
-  // e o orçamento inclui os tokens de raciocínio — max_tokens é rejeitado/ignorado.
   if (opts?.reasoningModel) {
     body.max_completion_tokens = 8192;
   } else {
@@ -129,8 +212,6 @@ async function fetchOpenAICompatible(
   const reasoning = typeof message?.reasoning === "string" ? message.reasoning : "";
   const text = (content || reasoning).trim();
 
-  // Modelo de raciocínio pode exaurir o orçamento em reasoning e devolver content:null.
-  // Se nem reasoning vier, lança erro para o fallback chain atuar em vez de responder vazio.
   if (!text) {
     throw new Error(`${baseUrl}: resposta vazia (reasoning exauriu o orçamento de tokens)`);
   }
@@ -287,14 +368,16 @@ async function runAnthropicLoop(
 
         send({ type: "tool_use", id: toolUse.id, name: toolUse.name, input });
 
-        const result = await toolExecutor(toolUse.name, input);
+        const rawResult = await toolExecutor(toolUse.name, input);
 
-        send({ type: "tool_result", id: toolUse.id, content: result });
+        const browserResult = formatResultForBrowser(rawResult);
+        send({ type: "tool_result", id: toolUse.id, content: browserResult });
 
+        const modelResult = truncateResult(toolUse.name, rawResult);
         toolResults.push({
           type: "tool_result",
           tool_use_id: toolUse.id,
-          content: JSON.stringify(result),
+          content: modelResult,
         });
       }
 
@@ -357,6 +440,11 @@ async function tryFallbackChain(
 }
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   const { messages, memoryContext, provider, model } = await req.json();
 
   if (!Array.isArray(messages)) {
@@ -378,7 +466,7 @@ export async function POST(req: NextRequest) {
       )
   );
 
-  const config = await getConfigFromSettings();
+  const config = await getConfigFromSettings(auth);
   const selectedProvider = resolveProvider(provider);
   const selectedModel = resolveModel(selectedProvider, model);
   const system = getSystemPrompt(typeof memoryContext === "string" ? memoryContext : "");
