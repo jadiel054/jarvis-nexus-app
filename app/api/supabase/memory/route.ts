@@ -1,7 +1,13 @@
 // app/api/supabase/memory/route.ts
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth/guard";
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   const body = await req.json();
   const { action, content, category, project, query, limit = 8 } = body;
 

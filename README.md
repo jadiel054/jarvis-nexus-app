@@ -55,20 +55,23 @@ vercel --prod
 
 ### 6. Registrar webhooks do Telegram
 
-Após o deploy, registre os 3 webhooks:
+Após o deploy, registre os 3 webhooks informando o `secret_token` para validação de segurança (`TELEGRAM_WEBHOOK_SECRET`):
 
 ```bash
 # JarvisComando
 curl -X POST "https://api.telegram.org/bot{COMANDO_TOKEN}/setWebhook" \
-  -d "url=https://jarvis-nexus-app.vercel.app/api/telegram/webhook/comando"
+  -d "url=https://jarvis-nexus-app.vercel.app/api/telegram/webhook/comando" \
+  -d "secret_token={TELEGRAM_WEBHOOK_SECRET}"
 
 # JarvisAlerts
 curl -X POST "https://api.telegram.org/bot{ALERTS_TOKEN}/setWebhook" \
-  -d "url=https://jarvis-nexus-app.vercel.app/api/telegram/webhook/alerts"
+  -d "url=https://jarvis-nexus-app.vercel.app/api/telegram/webhook/alerts" \
+  -d "secret_token={TELEGRAM_WEBHOOK_SECRET}"
 
 # JarvisDev  
 curl -X POST "https://api.telegram.org/bot{DEV_TOKEN}/setWebhook" \
-  -d "url=https://jarvis-nexus-app.vercel.app/api/telegram/webhook/dev"
+  -d "url=https://jarvis-nexus-app.vercel.app/api/telegram/webhook/dev" \
+  -d "secret_token={TELEGRAM_WEBHOOK_SECRET}"
 ```
 
 ## Variáveis de Ambiente (todas obrigatórias no Vercel)
@@ -79,6 +82,8 @@ curl -X POST "https://api.telegram.org/bot{DEV_TOKEN}/setWebhook" \
 | `NEXT_PUBLIC_SUPABASE_URL` | URL do projeto Supabase |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Chave anon pública |
 | `SUPABASE_SERVICE_ROLE_KEY` | Chave service role (server only) |
+| `OWNER_USER_ID` | UUID do usuário proprietário do ecossistema no Supabase |
+| `INTERNAL_API_SECRET` | Segredo para autenticação interna de chamadas de API (`x-internal-secret`) |
 | `GITHUB_TOKEN` | Personal Access Token do GitHub |
 | `VERCEL_TOKEN` | Token da Vercel |
 | `VERCEL_TEAM_ID` | `team_cxs9DuXfZ1wseY1y7bFj8P1V` |
@@ -86,6 +91,7 @@ curl -X POST "https://api.telegram.org/bot{DEV_TOKEN}/setWebhook" \
 | `TELEGRAM_BOT_ALERTS_TOKEN` | Token do bot JarvisAlerts |
 | `TELEGRAM_BOT_DEV_TOKEN` | Token do bot JarvisDev |
 | `TELEGRAM_ADMIN_CHAT_ID` | Seu chat ID do Telegram |
+| `TELEGRAM_WEBHOOK_SECRET` | Token secreto para validar requisições dos webhooks do Telegram |
 | `TAVILY_API_KEY` | API key do Tavily Search |
 | `OPENAI_API_KEY` | API key da OpenAI (embeddings) |
 | `NEXT_PUBLIC_APP_URL` | URL do deploy (ex: https://jarvis-nexus-app.vercel.app) |
@@ -115,5 +121,3 @@ O `store/index.ts` usa `localStorage` + Zustand persist por padrão.
 Para migrar para Supabase completo, substituir as chamadas do store pelos endpoints:
 - `POST /api/supabase/memory` para memórias
 - As conversas podem ser salvas na tabela `conversations` + `messages`
-# Jarvis Nexus v7.0
-...

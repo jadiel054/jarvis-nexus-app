@@ -2,10 +2,16 @@
 // Server-side TTS: ElevenLabs (primary) → OpenAI TTS (fallback)
 // Client falls back to Web Speech API if both fail
 import { NextRequest } from "next/server";
+import { requireAuth } from "@/lib/auth/guard";
 
 export const maxDuration = 30;
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   const { text } = await req.json();
   if (!text?.trim()) return new Response("No text", { status: 400 });
 

@@ -367,7 +367,7 @@ export const allTools = [
   // ── ZARITH ─────────────────────────────────────────────────────
   {
     name: "zarith_delegate",
-    description: "Delega tarefa complexa para a Zarith (agente executora). Use para implementação >50 linhas, refatoração de sistema.",
+    description: "Delega tarefa complexa para a Zarith (agente executora). Use para qualquer implementação de código de produção, refatoração de sistema.",
     input_schema: {
       type: "object" as const,
       properties: {

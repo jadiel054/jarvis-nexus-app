@@ -1,8 +1,14 @@
 // app/api/agent/task/route.ts
 // Endpoint para Workers receberem tarefas do Jarvis via protocolo v1.0
 import { NextRequest, NextResponse } from "next/server";
+import { requireAuth } from "@/lib/auth/guard";
 
 export async function POST(req: NextRequest) {
+  const auth = await requireAuth(req);
+  if (!auth.authorized) {
+    return auth.response;
+  }
+
   const body = await req.json();
   const { protocol_version, task_id, from, to, task } = body;
 
